@@ -1,0 +1,15 @@
+# PyInstaller 构建中间产物（可由 build_exe.ps1 完全重新生成）
+/build/
+
+# Python 缓存
+__pycache__/
+*.pyc
+
+# LaTeX 编译中间产物（保留 .tex / .pdf 成品，其余不入库）
+*.aux
+*.log
+*.toc
+*.out
+*.synctex.gz
+*.fls
+*.fdb_latexmk

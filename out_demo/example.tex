@@ -1,0 +1,565 @@
+% -*- coding: utf-8 -*-
+% !TEX program = xelatex
+% 本文件由 md-to-pdf 生成；LaTeX 风格基于 latex模板/article-cn/ctexart-temp.tex
+
+\documentclass[zihao=-4]{ctexart}
+
+%----- 正文符号回退（必须紧接 \documentclass，不能往后挪）-----
+% 原理：字符"活动化"只在**记号化之前**生效。导言区后面的
+% \fancyhead[C]{\small 页眉文字} 会先把页眉读成记号；若那一刻 ∀ 还不是活动字符，
+% 这个记号就被冻成普通字符，页眉里的 ∀ 又会渲染成空白（正文不受影响：正文
+% 要等开始排版之后才记号化）。所以这段必须放在任何会捕获正文文字的宏之前。
+
+%----- 正文符号回退（CJK 字体缺字形 → 数学字体）-----
+% 见 SYMBOL_FALLBACKS：∀ ∃ ∅ ⊂ ⊆ ⇒ ⇐ ⇔ ↦ ∂ ∇ ⊗ 等中文字体没有字形，
+% 直接写正文会变成空白；这里把它们映射到等价的 LaTeX 数学命令。
+\makeatletter
+\newcommand\mdpdfSymbol[2]{%
+  \begingroup
+  \lccode`\~=`#1\relax
+  \lowercase{\endgroup\def~}{#2}%
+  \catcode`#1=\active}
+\makeatother
+
+
+%----- 表情/警示符号 ❗ ⚠ 💡（切到 Windows 自带的 Segoe UI Symbol）-----
+% 三个图标宏都必须在这里（活动字符声明之前）定义完；换字体只在图标宏内部生效，
+% 不影响正文其它字符。\mbox 是为了数学模式里也安全（$❗$ 与正文 ❗ 都能排）。
+\IfFontExistsTF{Segoe UI Symbol}{%
+  \newfontfamily\mdpdfsymfont{Segoe UI Symbol}%
+  \newcommand\mdpdfIconExcl{\mbox{{\mdpdfsymfont ❗}}}%
+  \newcommand\mdpdfIconWarn{\mbox{{\mdpdfsymfont ⚠}}}%
+  \newcommand\mdpdfIconBulb{\mbox{{\mdpdfsymfont 💡}}}%
+}{%
+  \newcommand\mdpdfIconExcl{}%
+  \newcommand\mdpdfIconWarn{}%
+  \newcommand\mdpdfIconBulb{}%
+}
+
+\mdpdfSymbol{∀}{\ensuremath{\forall}}
+\mdpdfSymbol{∃}{\ensuremath{\exists}}
+\mdpdfSymbol{∄}{\ensuremath{\nexists}}
+\mdpdfSymbol{∅}{\ensuremath{\varnothing}}
+\mdpdfSymbol{∉}{\ensuremath{\notin}}
+\mdpdfSymbol{∋}{\ensuremath{\ni}}
+\mdpdfSymbol{∌}{\ensuremath{\not\ni}}
+\mdpdfSymbol{⊂}{\ensuremath{\subset}}
+\mdpdfSymbol{⊃}{\ensuremath{\supset}}
+\mdpdfSymbol{⊄}{\ensuremath{\not\subset}}
+\mdpdfSymbol{⊆}{\ensuremath{\subseteq}}
+\mdpdfSymbol{⊇}{\ensuremath{\supseteq}}
+\mdpdfSymbol{⊊}{\ensuremath{\subsetneq}}
+\mdpdfSymbol{⊋}{\ensuremath{\supsetneq}}
+\mdpdfSymbol{∖}{\ensuremath{\setminus}}
+\mdpdfSymbol{↔}{\ensuremath{\leftrightarrow}}
+\mdpdfSymbol{↕}{\ensuremath{\updownarrow}}
+\mdpdfSymbol{⇐}{\ensuremath{\Leftarrow}}
+\mdpdfSymbol{⇒}{\ensuremath{\Rightarrow}}
+\mdpdfSymbol{⇔}{\ensuremath{\Leftrightarrow}}
+\mdpdfSymbol{↦}{\ensuremath{\mapsto}}
+\mdpdfSymbol{⇀}{\ensuremath{\rightharpoonup}}
+\mdpdfSymbol{⇁}{\ensuremath{\rightharpoondown}}
+\mdpdfSymbol{∬}{\ensuremath{\iint}}
+\mdpdfSymbol{∂}{\ensuremath{\partial}}
+\mdpdfSymbol{∇}{\ensuremath{\nabla}}
+\mdpdfSymbol{−}{\ensuremath{-}}
+\mdpdfSymbol{∓}{\ensuremath{\mp}}
+\mdpdfSymbol{⋅}{\ensuremath{\cdot}}
+\mdpdfSymbol{∘}{\ensuremath{\circ}}
+\mdpdfSymbol{∗}{\ensuremath{\ast}}
+\mdpdfSymbol{∙}{\ensuremath{\bullet}}
+\mdpdfSymbol{≃}{\ensuremath{\simeq}}
+\mdpdfSymbol{≅}{\ensuremath{\cong}}
+\mdpdfSymbol{≪}{\ensuremath{\ll}}
+\mdpdfSymbol{≫}{\ensuremath{\gg}}
+\mdpdfSymbol{≺}{\ensuremath{\prec}}
+\mdpdfSymbol{≻}{\ensuremath{\succ}}
+\mdpdfSymbol{⊢}{\ensuremath{\vdash}}
+\mdpdfSymbol{⊨}{\ensuremath{\vDash}}
+\mdpdfSymbol{⊖}{\ensuremath{\ominus}}
+\mdpdfSymbol{⊗}{\ensuremath{\otimes}}
+\mdpdfSymbol{⊘}{\ensuremath{\oslash}}
+\mdpdfSymbol{⋯}{\ensuremath{\cdots}}
+\mdpdfSymbol{⋮}{\ensuremath{\vdots}}
+\mdpdfSymbol{⌈}{\ensuremath{\lceil}}
+\mdpdfSymbol{⌉}{\ensuremath{\rceil}}
+\mdpdfSymbol{⌊}{\ensuremath{\lfloor}}
+\mdpdfSymbol{⌋}{\ensuremath{\rfloor}}
+\mdpdfSymbol{≢}{\ensuremath{\not\equiv}}
+\mdpdfSymbol{≁}{\ensuremath{\nsim}}
+\mdpdfSymbol{≄}{\ensuremath{\not\simeq}}
+\mdpdfSymbol{≇}{\ensuremath{\ncong}}
+\mdpdfSymbol{≉}{\ensuremath{\not\approx}}
+\mdpdfSymbol{≊}{\ensuremath{\approxeq}}
+\mdpdfSymbol{≂}{\ensuremath{\eqsim}}
+\mdpdfSymbol{≀}{\ensuremath{\wr}}
+\mdpdfSymbol{∼}{\ensuremath{\sim}}
+\mdpdfSymbol{≲}{\ensuremath{\lesssim}}
+\mdpdfSymbol{≳}{\ensuremath{\gtrsim}}
+\mdpdfSymbol{≰}{\ensuremath{\nleq}}
+\mdpdfSymbol{≱}{\ensuremath{\ngeq}}
+\mdpdfSymbol{⊅}{\ensuremath{\not\supset}}
+\mdpdfSymbol{⊈}{\ensuremath{\nsubseteq}}
+\mdpdfSymbol{⊉}{\ensuremath{\nsupseteq}}
+\mdpdfSymbol{∤}{\ensuremath{\nmid}}
+\mdpdfSymbol{∦}{\ensuremath{\nparallel}}
+\mdpdfSymbol{∁}{\ensuremath{\complement}}
+\mdpdfSymbol{∆}{\ensuremath{\Delta}}
+\mdpdfSymbol{∎}{\ensuremath{\blacksquare}}
+\mdpdfSymbol{∐}{\ensuremath{\coprod}}
+\mdpdfSymbol{∔}{\ensuremath{\dotplus}}
+\mdpdfSymbol{∭}{\ensuremath{\iiint}}
+\mdpdfSymbol{∡}{\ensuremath{\measuredangle}}
+\mdpdfSymbol{∢}{\ensuremath{\sphericalangle}}
+\mdpdfSymbol{ℝ}{\ensuremath{\mathbb{R}}}
+\mdpdfSymbol{ℕ}{\ensuremath{\mathbb{N}}}
+\mdpdfSymbol{ℤ}{\ensuremath{\mathbb{Z}}}
+\mdpdfSymbol{ℚ}{\ensuremath{\mathbb{Q}}}
+\mdpdfSymbol{ℂ}{\ensuremath{\mathbb{C}}}
+\mdpdfSymbol{ℙ}{\ensuremath{\mathbb{P}}}
+\mdpdfSymbol{ℍ}{\ensuremath{\mathbb{H}}}
+\mdpdfSymbol{ℓ}{\ensuremath{\ell}}
+\mdpdfSymbol{ℏ}{\ensuremath{\hbar}}
+\mdpdfSymbol{℘}{\ensuremath{\wp}}
+\mdpdfSymbol{ℵ}{\ensuremath{\aleph}}
+\mdpdfSymbol{ℑ}{\ensuremath{\Im}}
+\mdpdfSymbol{ℜ}{\ensuremath{\Re}}
+\mdpdfSymbol{Å}{\ensuremath{\text{\AA}}}
+\mdpdfSymbol{✓}{\ding{51}}
+\mdpdfSymbol{✔}{\ding{52}}
+\mdpdfSymbol{✗}{\ding{55}}
+\mdpdfSymbol{✘}{\ding{56}}
+\mdpdfSymbol{☐}{\ensuremath{\square}}
+\mdpdfSymbol{☑}{\ensuremath{\boxtimes}}
+\mdpdfSymbol{☒}{\ensuremath{\boxtimes}}
+\mdpdfSymbol{Ⅼ}{\ensuremath{\mathrm{L}}}
+\mdpdfSymbol{Ⅽ}{\ensuremath{\mathrm{C}}}
+\mdpdfSymbol{Ⅾ}{\ensuremath{\mathrm{D}}}
+\mdpdfSymbol{Ⅿ}{\ensuremath{\mathrm{M}}}
+\mdpdfSymbol{⑪}{\textcircled{\scriptsize 11}}
+\mdpdfSymbol{⑫}{\textcircled{\scriptsize 12}}
+\mdpdfSymbol{⑬}{\textcircled{\scriptsize 13}}
+\mdpdfSymbol{⑭}{\textcircled{\scriptsize 14}}
+\mdpdfSymbol{⑮}{\textcircled{\scriptsize 15}}
+\mdpdfSymbol{⑯}{\textcircled{\scriptsize 16}}
+\mdpdfSymbol{⑰}{\textcircled{\scriptsize 17}}
+\mdpdfSymbol{⑱}{\textcircled{\scriptsize 18}}
+\mdpdfSymbol{⑲}{\textcircled{\scriptsize 19}}
+\mdpdfSymbol{⑳}{\textcircled{\scriptsize 20}}
+\mdpdfSymbol{⅓}{\ensuremath{\frac{1}{3}}}
+\mdpdfSymbol{⅔}{\ensuremath{\frac{2}{3}}}
+\mdpdfSymbol{⅕}{\ensuremath{\frac{1}{5}}}
+\mdpdfSymbol{⅖}{\ensuremath{\frac{2}{5}}}
+\mdpdfSymbol{⅗}{\ensuremath{\frac{3}{5}}}
+\mdpdfSymbol{⅘}{\ensuremath{\frac{4}{5}}}
+\mdpdfSymbol{⅙}{\ensuremath{\frac{1}{6}}}
+\mdpdfSymbol{⅚}{\ensuremath{\frac{5}{6}}}
+\mdpdfSymbol{⅛}{\ensuremath{\frac{1}{8}}}
+\mdpdfSymbol{⅜}{\ensuremath{\frac{3}{8}}}
+\mdpdfSymbol{⅝}{\ensuremath{\frac{5}{8}}}
+\mdpdfSymbol{⅞}{\ensuremath{\frac{7}{8}}}
+\mdpdfSymbol{⁰}{\ensuremath{^{0}}}
+\mdpdfSymbol{¹}{\ensuremath{^{1}}}
+\mdpdfSymbol{²}{\ensuremath{^{2}}}
+\mdpdfSymbol{³}{\ensuremath{^{3}}}
+\mdpdfSymbol{⁴}{\ensuremath{^{4}}}
+\mdpdfSymbol{⁵}{\ensuremath{^{5}}}
+\mdpdfSymbol{⁶}{\ensuremath{^{6}}}
+\mdpdfSymbol{⁷}{\ensuremath{^{7}}}
+\mdpdfSymbol{⁸}{\ensuremath{^{8}}}
+\mdpdfSymbol{⁹}{\ensuremath{^{9}}}
+\mdpdfSymbol{⁺}{\ensuremath{^{+}}}
+\mdpdfSymbol{⁻}{\ensuremath{^{-}}}
+\mdpdfSymbol{⁼}{\ensuremath{^{=}}}
+\mdpdfSymbol{⁽}{\ensuremath{^{(}}}
+\mdpdfSymbol{⁾}{\ensuremath{^{)}}}
+\mdpdfSymbol{ⁿ}{\ensuremath{^{n}}}
+\mdpdfSymbol{₀}{\ensuremath{_{0}}}
+\mdpdfSymbol{₁}{\ensuremath{_{1}}}
+\mdpdfSymbol{₂}{\ensuremath{_{2}}}
+\mdpdfSymbol{₃}{\ensuremath{_{3}}}
+\mdpdfSymbol{₄}{\ensuremath{_{4}}}
+\mdpdfSymbol{₅}{\ensuremath{_{5}}}
+\mdpdfSymbol{₆}{\ensuremath{_{6}}}
+\mdpdfSymbol{₇}{\ensuremath{_{7}}}
+\mdpdfSymbol{₈}{\ensuremath{_{8}}}
+\mdpdfSymbol{₉}{\ensuremath{_{9}}}
+\mdpdfSymbol{₊}{\ensuremath{_{+}}}
+\mdpdfSymbol{₋}{\ensuremath{_{-}}}
+\mdpdfSymbol{₌}{\ensuremath{_{=}}}
+\mdpdfSymbol{₍}{\ensuremath{_{(}}}
+\mdpdfSymbol{₎}{\ensuremath{_{)}}}
+\mdpdfSymbol{❗}{\mdpdfIconExcl}
+\mdpdfSymbol{⚠}{\mdpdfIconWarn}
+\mdpdfSymbol{💡}{\mdpdfIconBulb}
+
+
+\usepackage{amsmath,amsthm,amssymb}
+\usepackage[version=4]{mhchem} % \ce{...} 化学/核素符号（同位素、核反应），物理学讲义常用
+\usepackage{siunitx} % \SI{...}{...} 物理单位（不用的文档无影响，见 install_tex.ps1）
+\usepackage{mathrsfs}
+\usepackage{graphicx}
+\usepackage{subfig}
+\usepackage{color,xcolor}
+\usepackage{enumitem}
+\usepackage[normalem]{ulem}
+\usepackage{float}
+\usepackage{caption}
+\usepackage{pifont}
+\usepackage{tabularx}
+\usepackage{booktabs}
+\usepackage{array}
+\usepackage{multirow,multicol}
+\usepackage{longtable}
+\usepackage{makecell}
+% 表格行距：中文表格上下行默认太挤，放大行高（对 tabular / longtable 均生效）
+\renewcommand{\arraystretch}{1.5}
+\usepackage{anyfontsize}
+\usepackage{geometry}
+\geometry{left=2cm,right=2cm,top=2cm,bottom=2.2cm} % 紧凑页边距（原模板 1.25in/1in）
+\setlength{\headheight}{18pt}
+\setlength{\headsep}{14pt}
+\setlength{\footskip}{22pt}
+
+%----- 页眉页脚（居中，ctexart-temp2 的 oneside 风格）-----
+\usepackage{fancyhdr}
+\pagestyle{fancy}
+\fancyhf{}
+\fancyhead[C]{\small Python 数据分析 · 实战笔记}
+\fancyfoot[C]{\small 第 \thepage\ 页}
+\renewcommand{\headrulewidth}{0.4pt}
+\renewcommand{\footrulewidth}{0pt}
+
+%----- 设置超链接 -----
+\usepackage{hyperref}
+\hypersetup{
+  colorlinks=true,
+  linkcolor=black,
+  citecolor=blue,
+  filecolor=blue,
+  urlcolor=blue
+}
+
+% 允许多行公式跨页显示
+\allowdisplaybreaks
+
+%----- 交给 CJK 字体的码位（xeCJK 字符类）-----
+% 为什么需要：中文字体（SimSun/FangSong）自带的符号远比西文主字体（Latin Modern）
+% 多。落在西文字体上的符号，LM 没有字形就只有空白（如 Ⅰ Ⅱ Ⅲ、■ □、─ │、′ ″）。
+% 这里声明为 CJK 字符类的码位，改由中文字体排版。
+% 依据实测（measure_coverage.py 会重算）：只声明"SimSun 与 FangSong 都有字形、
+% 且 Latin Modern 没有"的码位。**每段必须是连续区间**——段内一旦夹着西文字体
+% 本来就能显示的字符，声明过去反而会把它弄坏。改完跑 test_symbol_fallback.py。
+\xeCJKDeclareCharClass{CJK}{
+  "0370 -> "03FF,                          % 希腊字母（3σ、均值 μ）
+  "2015, "2032 -> "2033, "2035,            % ― 角分秒 ′ ″ ‵
+  "2070 -> "209F,                          % 上下标 ⁰¹² ₀₁₂（中文字体有字形的部分）
+  "2105, "2109, "2121,                     % ℅ ℉ ℡
+  "2160 -> "216B, "2170 -> "2179,          % 罗马数字 Ⅰ-Ⅻ 与 ⅰ-ⅹ
+  "2190 -> "21FF,                          % 箭头 → ← ↑ ↓ ↖↗↘↙
+  "2200 -> "22FF,                          % 数学运算符 ∈ ∑ ∏ √ ≤ ≥ ∴ ∵ 等
+  "2312,                                   % ⌒
+  "2460 -> "24FF,                          % 带圈数字 ①②③ ⑴⒈
+  "2500 -> "254B, "2550 -> "2573,          % 制表符 ─ │ ┌ ┐ └ ┘ ├ ┤
+  "2581 -> "258F, "2593 -> "2595,          % 方块元素 ▁▂▃█▌▐
+  "25A0 -> "25A1, "25B2 -> "25B3, "25BC -> "25BD, "25C6 -> "25C7,
+  "25CB, "25CE -> "25CF, "25E2 -> "25E5,   % ■□▲△▼▽◆◇○◎●◢◣◤◥
+  "2605 -> "2606, "2609, "2640, "2642     % ★☆☉♀♂
+}
+
+%----- 设置编号格式 -----
+\numberwithin{equation}{section}
+\numberwithin{figure}{section}
+\numberwithin{table}{section}
+
+%----- 重新设置图表公式 autoref -------
+\renewcommand{\figureautorefname}{图}
+\renewcommand{\tableautorefname}{表}
+\renewcommand{\equationautorefname}{公式}
+
+%----- 算法环境 -----
+\usepackage{algorithm}
+\usepackage{algpseudocode}
+\floatname{algorithm}{算法}
+\algrenewcommand\algorithmicrequire{\textbf{输入:}}
+\algrenewcommand\algorithmicensure{\textbf{输出:}}
+
+%----- 列表样式（紧凑）-----
+\setlist{nolistsep}
+
+%----- 图片路径（md-to-pdf 把本地图片复制到 ./images/）-----
+\graphicspath{{./}{./images/}}
+
+%----- tabularx 新列类型 -----
+\newcolumntype{L}{X}
+\newcolumntype{C}{>{\centering \arraybackslash}X}
+\newcolumntype{R}{>{\raggedleft \arraybackslash}X}
+\newcolumntype{P}[1]{>{\centering \arraybackslash}p{#1}}
+
+%----- 数学定理设置 -----
+\theoremstyle{plain}
+\newtheorem{definition}{定义}[section]
+\newtheorem{proposition}{命题}[section]
+\newtheorem{lemma}{引理}[section]
+\newtheorem{theorem}{定理}[section]
+\newtheorem{example}{例}
+\newtheorem{corollary}{推论}[section]
+\newtheorem{remark}{注}[section]
+
+%----- 微分符号 / 常用命令（来自模板）-----
+\newcommand{\dif}{\mathop{}\!\mathrm{d}}
+\newcommand{\CC}{\ensuremath{\mathbb{C}}}
+\newcommand{\RR}{\ensuremath{\mathbb{R}}}
+\newcommand{\abs}[1]{\lvert#1\rvert}
+\newcommand{\norm}[1]{\lVert#1\rVert}
+\newcommand{\dx}[1][x]{\mathop{}\!\mathrm{d}#1}
+\newcommand{\ii}{\mathrm{i}\mkern1mu}
+\newcommand{\refe}[2]{(\ref{#1})--(\ref{#2})}
+\newcommand{\A}{\mathcal{A}}
+\newcommand{\bA}{\boldsymbol{A}}
+\newcommand{\red}[1]{\textcolor{red}{#1}}
+
+%----- 代码块（listings）-----
+\usepackage{listings}
+\lstset{
+  basicstyle=\ttfamily\small,
+  frame=single, framerule=0.3pt, rulecolor=\color{gray!50},
+  backgroundcolor=\color{gray!7},
+  breaklines=true, columns=fullflexible,
+  showstringspaces=false, keepspaces=true,
+  aboveskip=2pt, belowskip=2pt,
+}
+
+%----- 要点框（tip/warn/key，tcolorbox，可跨页）-----
+% 标题栏：浅彩底 + 深色加粗字（colbacktitle 必须显式设浅色，否则默认取深色边框导致看不清）
+% 注：GitHub 告示框 [!NOTE]/[!TIP]/[!IMPORTANT]/[!WARNING]/[!CAUTION] 分别映射到
+% notebox（蓝）/ tipbox（绿）/ keybox（紫）/ warnbox（橙）/ cautionbox（红）。
+\usepackage[most]{tcolorbox}
+\newtcolorbox{tipbox}[1][要点]{breakable,enhanced,colback=green!8,colframe=green!55!black,colbacktitle=green!12!white,coltitle=black!80,fonttitle=\bfseries,title={#1},boxrule=0.5pt,arc=1.5mm,left=2mm,right=2mm,top=1.5mm,bottom=1.5mm}
+\newtcolorbox{warnbox}[1][注意]{breakable,enhanced,colback=orange!8,colframe=orange!70!black,colbacktitle=orange!18!white,coltitle=black!80,fonttitle=\bfseries,title={#1},boxrule=0.5pt,arc=1.5mm,left=2mm,right=2mm,top=1.5mm,bottom=1.5mm}
+\newtcolorbox{keybox}[1][核心]{breakable,enhanced,colback=violet!8,colframe=violet!60!black,colbacktitle=violet!14!white,coltitle=black!80,fonttitle=\bfseries,title={#1},boxrule=0.5pt,arc=1.5mm,left=2mm,right=2mm,top=1.5mm,bottom=1.5mm}
+\newtcolorbox{notebox}[1][注意]{breakable,enhanced,colback=blue!8,colframe=blue!55!black,colbacktitle=blue!12!white,coltitle=black!80,fonttitle=\bfseries,title={#1},boxrule=0.5pt,arc=1.5mm,left=2mm,right=2mm,top=1.5mm,bottom=1.5mm}
+\newtcolorbox{cautionbox}[1][小心]{breakable,enhanced,colback=red!8,colframe=red!60!black,colbacktitle=red!12!white,coltitle=black!80,fonttitle=\bfseries,title={#1},boxrule=0.5pt,arc=1.5mm,left=2mm,right=2mm,top=1.5mm,bottom=1.5mm}
+
+%----- 普通引用（引述文本）：浅灰底 + 左侧竖条，无标题 -----
+% 与上面五种彩色告示框同族但**中性**：不带标记的 `> 引用` 也该有排版（原先只是两侧
+% 缩进的 \begin{quote}，看上去和正文没差别）。boxrule=0pt + leftrule：只画一条左竖条，
+% 灰底色不抢眼，读者一眼能把"引述别人的话"与"作者自己的话"分开。
+\newtcolorbox{mdpdfquote}{breakable,enhanced,colback=black!4,colframe=black!45,boxrule=0pt,leftrule=1.6pt,arc=0.8mm,left=3mm,right=2.5mm,top=2mm,bottom=2mm}
+
+%----- 封面：纯色背景 + 黑字（--cover-color 可改；默认白色纸张色）-----
+\newcommand{\mdcovercolor}[1]{\definecolor{coverbg}{HTML}{#1}}
+\definecolor{coverbg}{HTML}{FFFFFF}
+
+\mdcovercolor{FFFFFF}
+\setcounter{secnumdepth}{3}
+\setcounter{tocdepth}{3}
+
+\hypersetup{pdftitle={Python 数据分析实战笔记}, pdfauthor={示例作者}}
+
+\begin{document}
+
+\begin{titlepage}
+
+\pagecolor{coverbg}
+
+\thispagestyle{empty}
+
+\color{black}
+
+\centering
+
+\vspace*{0.30\textheight}
+
+{\zihao{1}\bfseries Python 数据分析实战笔记}\\[0.9em]
+
+{\zihao{3} 从数据清洗到可视化（md-to-pdf 示例文档，用于验证全部语法）}\\[3.2em]
+
+\vfill
+
+{\zihao{4} 作者：示例作者}\\[0.7em]
+
+{\zihao{4} 版本：v1.2}\\[0.7em]
+
+{\zihao{4} 日期：2025-01-01}\\[0.7em]
+
+\vspace{0.5em}
+
+\vfill
+
+{\zihao{-5}\color{black!70} 本文档为 md-to-pdf 示例，运行 \texttt{md-to-pdf example.md} 即可生成 PDF}\\[1.0em]
+
+\vspace*{1.1cm}
+
+\end{titlepage}
+
+\nopagecolor
+
+\setcounter{page}{1}
+
+\pagenumbering{roman}
+
+\tableofcontents
+
+\clearpage
+
+\pagenumbering{arabic}
+
+\setcounter{page}{1}
+
+\begin{keybox}[使用说明]
+本文演示 md-to-pdf 的全部特性：封面 front matter、LaTeX 自动章节编号、表格、代码块高亮、嵌套/任务列表、引用、脚注、数学公式、要点框、强制分页与图片。数学公式由 LaTeX \textbf{原生渲染}，无需 KaTeX。
+\end{keybox}
+
+\section{数据读取与清洗}
+
+\subsection{读取 CSV}
+
+读取文件用标准库或 pandas 均可，注意编码与缺失值处理。行内的强调包括\textbf{加粗}、\emph{斜体}、\sout{删除线}、行内代码 \texttt{pd.read\_csv}，以及文字中的特殊字符：50\% 完成、a\_b、C++、\{花括号\}、\# 号、\$ 符号。
+
+\noindent \begin{lstlisting}[language=Python]
+import pandas as pd
+
+df = pd.read_csv("sales.csv", encoding="utf-8-sig")
+df = df.dropna(subset=["amount"])
+df["date"] = pd.to_datetime(df["date"])
+print(df.head())
+\end{lstlisting}
+
+\subsection{常用操作对比}
+
+\noindent \begin{tabular}{lcrc}
+\toprule
+操作 & 方法 & 说明 & 备注 \\
+\midrule
+读取 & \texttt{read\_csv} & 读取 CSV 文件 & 常用 \\
+筛选 & \texttt{query} & 按条件过滤行 & 高效 \\
+分组 & \texttt{groupby} & 聚合统计 & 重点 \\
+透视 & \texttt{pivot\_table} & 行列重排 & 进阶 \\
+\bottomrule
+\end{tabular}
+
+\subsection{数据清洗要点}
+
+\begin{itemize}
+\item 缺失值：\texttt{dropna} / \texttt{fillna} 二选一
+\begin{itemize}
+\item 直接删除行 → 样本量损失
+\item 均值/中位数填充 → 引入偏差
+\end{itemize}
+\item 重复值：\texttt{drop\_duplicates} 按关键列去重
+\item 异常值：3σ 原则或 IQR 方法剔除
+\end{itemize}
+
+按步骤执行：
+
+\begin{enumerate}
+\item 先探查 \texttt{df.info()} 与 \texttt{df.describe()}
+\item 再处理缺失与重复
+\item 最后统一数据类型
+\item 校验结果写入新文件
+\end{enumerate}
+
+\subsection{任务清单示例}
+
+\begin{itemize}
+\item[$\boxtimes$] 环境安装与依赖确认
+\item[$\boxtimes$] 数据读取脚本
+\item[$\square$] 清洗规则文档化
+\item[$\square$] 自动化流水线
+\end{itemize}
+
+\subsection{引用与脚注}
+
+\begin{mdpdfquote}
+数据清洗是整个分析流程中最耗时的一步，通常占全部工作量的 60\% 以上。
+\end{mdpdfquote}
+
+有人建议把清洗规则写成配置项\footnote{配置化清洗规则便于团队协作与规则复用。}，以便复现与审计。公式示例：质能方程 $E = mc^2$，以及更复杂的 $f(x) = \frac{1}{\sqrt{2\pi}\sigma} e^{-\frac{(x-\mu)^2}{2\sigma^2}}$。
+
+\[S = \sum_{i=1}^{n} x_i^2, \quad \bar{x} = \frac{1}{n}\sum_{i=1}^{n} x_i\]
+
+\subsection{数学符号（正文直写即可）}
+
+中文字体缺字形的常用符号已内置回退（v1.0.5 起），正文里直接写即可，不必包 \texttt{\$...\$}：对 ∀ε>0 存在 ∃δ>0；A ⊂ B ⊆ C；x ↦ y；a ⇔ b；空集 ∅、偏导 ∂、梯度 ∇、张量积 ⊗；角标 10⁻³、m³、v₀、a₁、x²+y²；x∈ℝ、⌈x⌉≥x；✓ 通过 ✗ 未通过。
+
+\noindent \begin{tabularx}{\linewidth}{lL}
+\toprule
+类别 & 符号 \\
+\midrule
+逻辑 / 集合 & ∀ ∃ ∄ ∉ ∋ ⊄ ⊇ ⊊ ⊋ ∖ \\
+箭头 & ⇐ ⇒ ⇔ ↦ ⇀ ⇁ ↔ ↕ \\
+运算 & ∬ ∓ ⋅ ∘ ∗ ∙ ≃ ≅ ≪ ≫ ⊖ ⊘ ⋯ ⋮ \\
+罗马数字 / 图形 & Ⅰ Ⅱ Ⅲ Ⅳ ■ □ ▲ △ ▼ ▽ ◆ ◇ ○ ◎ ● ★ ☆ \\
+\bottomrule
+\end{tabularx}
+
+\begin{tipbox}[提示]
+表里没收录的冷僻符号仍可写成 \texttt{\$\textbackslash{}gtrsim\$} 这样的数学式；确实常用的可以加进 \texttt{md\_to\_pdf.py} 的 \texttt{SYMBOL\_FALLBACKS}。
+\end{tipbox}
+
+\subsection{表情与警示标记（v1.0.6 起）}
+
+正文里可直接写 ❗ ⚠ 💡（带变体选择符的 ❗ ⚠ 💡 效果相同），PDF 里会显示成对应图标。
+
+以标记开头的引用块会自动变成彩色告示框：
+
+\begin{tipbox}[思路]
+先看数据分布，再决定清洗策略；分布严重偏斜时优先考虑中位数。
+\end{tipbox}
+
+\begin{warnbox}[警告]
+⚠ 单位换算最容易出错，务必逐项核对一遍再往下算。
+\end{warnbox}
+
+\begin{cautionbox}[易错提醒]
+\texttt{dropna} 之后索引不连续，取行要用 \texttt{iloc} 而不是 \texttt{loc}。
+\end{cautionbox}
+
+\subsection{图片}
+
+\begin{center}\includegraphics[width=0.8\linewidth]{images/img_a64454d113.png}\\\captionof{figure}{数据清洗流程图（示例图片）}\end{center}
+
+\begin{tipbox}[小提示]
+\texttt{groupby} 之后记得用 \texttt{reset\_index()} 恢复列结构，避免链式索引警告。
+\end{tipbox}
+
+\begin{warnbox}[注意事项]
+\texttt{fillna} 默认按列填充，跨列填充需显式传入字典或使用 \texttt{axis=1}，否则容易静默出错。
+\end{warnbox}
+
+\clearpage
+
+\section{可视化与输出}
+
+\subsection{绘图三步法}
+
+\begin{enumerate}
+\item 确定图形类型（折线/柱状/散点）
+\item 精简数据字段（只保留需要的列）
+\item 输出与标注（标题、轴标签、图例）
+\end{enumerate}
+
+\subsection{配置片段}
+
+\noindent \begin{lstlisting}
+{
+  "output": "report.pdf",
+  "dpi": 300,
+  "style": "seaborn-v0_8",
+  "savefig": { "bbox_inches": "tight" }
+}
+\end{lstlisting}
+
+\subsection{相关资源}
+
+\begin{itemize}
+\item 官方文档：\url{https://pandas.pydata.org/docs/}
+\item 自动链接测试：\url{https://matplotlib.org/stable/} 与 \href{https://pandas.pydata.org/docs/getting\_started/index.html}{Pandas 中文教程}
+\end{itemize}
+
+\noindent\rule{\linewidth}{0.4pt}
+
+\emph{本文档由 md-to-pdf 生成，LaTeX 风格、紧凑排版、纯色封面。}
+
+\end{document}
