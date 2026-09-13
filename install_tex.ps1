@@ -65,7 +65,7 @@ Write-Host "==> 配置 tlmgr 镜像（清华 CTAN）..."
 & $tlmgr path add 2>&1 | Out-Null
 
 # TinyTeX-1 缺失的宏包（TL2026 命名：mathrsfs 在 jknapltx、algorithm 在 algorithms）。
-# 覆盖 md-to-pdf 模板（CTEXART_TEMP_PREAMBLE）用到的全部宏包，避免"内容用到→编译失败"：
+# 覆盖 md-to-pdf 模板（templates\default.tex）用到的全部宏包，避免"内容用到→编译失败"：
 #   表格  booktabs/tabularx/array/longtable/multicol/float/pifont
 #   数学  amsthm/amssymb；物理单位 siunitx；化学/核素 mhchem
 # 注：tlmgr 对已存在的包是 no-op，重复安装无害。

@@ -43,6 +43,7 @@ python md_to_pdf_gui.py
 - **输出位置**：与拖入的 `.md` **同目录**，文件名与原文件同名（`<同名>.tex` + `<同名>.pdf`）。
 - **目录层级**（v1.0.6 起）：窗口里的下拉框选 `无目录` / `1 级` / `2 级` / `3 级` / `4 级`（默认 `3 级`），等价于命令行的 `--no-toc` / `--toc-depth N`；转换记录里会回显本次用的档位。该设置只影响**目录页**（`#` 记 1 级、`##` 记 2 级…），不改变正文章节编号。
 - **覆盖保护**：同名 `.tex/.pdf` 已存在时会弹窗询问是否覆盖；选「否」自动改用带序号的文件名，不会静默覆盖。
+- **排版模板**：一栏留空 = 内置默认模板 `templates\default.tex`；点「浏览…」选别的 `.tex` 即整体换一套排版规则，点「默认」清空。详见 [换排版规则](#换排版规则template)。
 - 也可以不带参数运行 `python md_to_pdf.py`，同样打开 GUI。
 
 > **打包版无黑框（双模式）**：用 `build_exe.ps1` 打包出的 `dist\md-to-pdf.exe` 是 **windowed（无控制台）构建**——双击/启动不会再弹黑色控制台。
@@ -62,7 +63,7 @@ python md_to_pdf.py example.md --no-toc       # 不要目录
 python md_to_pdf.py example.md --cover-color #DCE3EC --open   # 换封面底色并打开
 ```
 
-参数：`--header`、`--title`、`--subtitle`、`--cover-color`、`--no-numbers`、`--toc/--no-toc`、`--toc-depth N`(1–4)、`--keep-aux`、`--open`、`--gui`、`--version`。
+参数：`--header`、`--title`、`--subtitle`、`--cover-color`、`--no-numbers`、`--toc/--no-toc`、`--toc-depth N`(1–4)、`--keep-aux`、`--open`、`--template 模板.tex`、`--gui`、`--version`。
 
 > GUI 与命令行共用同一套转换逻辑，LaTeX 表格/公式等特性完全一致。
 
@@ -250,7 +251,37 @@ example.md ──► md-to-pdf ──► example.tex ──► xelatex（循环�
 - **表格**：Markdown 表格 → `booktabs` 三线表（超宽自动换行、超行数跨页）；
 - **目录/链接**：由 hyperref 生成，PDF 里可点击跳转。
 
-生成的 `.tex` 是**完整可编辑的 LaTeX**——想加自定义环境（定理、算法等）直接改 `.tex`，再手动用 xelatex 编译即可。
+生成的 `.tex` 是**完整可编辑的 LaTeX**——想加自定义环境（定理、算法等）直接改 `.tex`，再手动用 xelatex 编译即可；想改**所有后续转换**的排版规则，见下一节。
+
+> 手动编译要跑两遍：`xelatex 讲义.tex` 两次，否则目录页与交叉引用还是 `??`。工具内部是「循环编译到 `.aux` 稳定」（最多 5 遍）。另外图片靠导言区的 `\graphicspath{{./}{./images/}}` 定位，要在 `.tex` 所在目录编译；输出目录含中文时建议放纯 ASCII 路径（TinyTeX 的 putenv 限制，工具会自动绕道临时目录）。
+
+## 换排版规则（--template）
+
+**排版规则全部在一个模板文件里**：`templates\default.tex` —— 它是 LaTeX 导言区（从 `\documentclass` 到 `\begin{document}`），不指定 `--template` 时用的就是它，也就是本工具原有风格。
+
+想整体换一套规则（页边距、字号、页眉页脚、代码样式、告示框配色、章节编号、定理环境…）：
+
+```bash
+copy templates\default.tex 我的模板.tex        # 从默认模板改起
+# 编辑 我的模板.tex：例如把 \geometry{left=2cm,...} 改成你的版心
+python md_to_pdf.py 讲义.md --template 我的模板.tex
+```
+
+- **GUI 同款**：「排版模板」一栏留空 = 默认模板，点「浏览…」选 `.tex`。
+- **打包版 exe 也支持 `--template`**：换模板**不必重新打包**；改了默认模板或改了 py 才需要重跑 `build_exe.ps1`。
+- 模板里新增宏包要先装：`tlmgr install <包名>`（TinyTeX 与清华镜像见 `install_tex.ps1`）。
+- 改完跑一次 `python md_to_pdf.py example.md` 验证。
+
+**模板契约**——三样东西不能少（照抄默认模板即可）：
+
+| 标记 | md-to-pdf 拿它做什么 | 缺失/挪位的后果 |
+| --- | --- | --- |
+| `__SYMBOL_FALLBACKS__` | 换成正文符号回退表。**必须紧接 `\documentclass`** | 挪到 `\fancyhead` 之后，页眉里的 `∀` 变空白；整个删掉，正文与页眉的 `∀ ⊆ ⇒` 静默变空白（xelatex 只在 `.log` 写 `Missing character`，不报错） |
+| `__PAGE_HEADER__` | 换成 `--header` / front matter 的页眉文字 | 页眉不显示（转换结束会告警） |
+| `\begin{document}` | 正文起点；md-to-pdf 在它**前面**插入封面配色、编号深度、目录深度与 PDF 元数据，再拼封面 / 目录 / 正文 | 拼出的 `.tex` 不完整，编译失败 |
+
+- 三个标记都必须**恰好出现一次**。它们走的是全文文本替换，所以写进**注释**里也会被替换掉、导言区错位（表现为 `\hypersetup` / `\IfFontExistsTF` 未定义之类的编译错误）——`load_template()` 会把这种情况拦成明确报错，不会生成坏文件。
+- **封面版式不在模板里**：封面由 `build_tex()` 用 Python 拼（模板只定义 `\mdcovercolor`）。改封面要动代码。
 
 ## 最小可测试结构
 
@@ -258,6 +289,7 @@ example.md ──► md-to-pdf ──► example.tex ──► xelatex（循环�
 md-to-pdf/
 ├─ md_to_pdf.py          # 核心转换 + 命令行
 ├─ md_to_pdf_gui.py      # 图形界面（拖拽入口）
+├─ templates/default.tex # 默认排版模板（LaTeX 导言区；--template 换规则）
 ├─ test_symbol_fallback.py  # 符号自测：字符类清单 + 回退表逐符号 + 栅格 + 页眉 + 引述标记（需 xelatex）
 ├─ measure_coverage.py   # 符号覆盖实测：算该交给中文字体的码位 / 仍空白的码位
 ├─ install_tex.ps1    # 一键安装 TinyTeX

@@ -25,12 +25,20 @@ if ($LASTEXITCODE -ne 0) {
 }
 
 # 2. 打包（GUI 入口、无控制台、收集 tkdnd 拖拽数据）——产物名沿用 md-to-pdf.exe（无后缀）
-# 注意：dist\md-to-pdf.exe 正在运行（GUI 开着）时无法覆盖，PyInstaller 会报
-# PermissionError；先关掉窗口再打包。下面显式检查退出码，避免"没打成功却打印完成"。
+# 注意 1：md-to-pdf.spec 由 PyInstaller 按下面的命令行**自动重写**（含 --add-data 的
+#         datas），所以不要手改 spec —— 改了会在下次打包时被覆盖。
+# 注意 2：本脚本含中文，必须存成「UTF-8 with BOM」。无 BOM 时 Windows PowerShell 5.1
+#         按 ANSI 解码，中文乱码、字符串终止符被吃掉，脚本直接解析失败。
+# 注意 3：dist\md-to-pdf.exe 正在运行（GUI 开着）时无法覆盖，PyInstaller 会报
+#         PermissionError；先关掉窗口再打包。下面显式检查退出码，避免"没打成功却打印完成"。
 Write-Host "==> PyInstaller 打包 md-to-pdf.exe（无黑框）..."
+# --add-data 把默认排版模板 templates\default.tex 一并收进 exe（解包到 sys._MEIPASS），
+# 否则打包版找不到默认模板、启动即报「排版模板不存在」。换模板无需重打包：
+# exe 支持 --template 指向外部 .tex。
 python -m PyInstaller --noconfirm --clean --onefile --windowed `
     --name md-to-pdf `
     --collect-data tkinterdnd2 `
+    --add-data "templates;templates" `
     md_to_pdf_gui.py
 if ($LASTEXITCODE -ne 0) {
     Write-Host ""

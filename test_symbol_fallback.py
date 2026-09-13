@@ -80,7 +80,7 @@ def cjk_class_declaration() -> str:
     形如 \\xeCJKDeclareCharClass{CJK}{<多行码位列表>}：第一个花括号是字符类名，
     要取到的是**第二个**花括号配对结束为止。
     """
-    raw = md_to_pdf.CTEXART_TEMP_PREAMBLE
+    raw = md_to_pdf.load_template()
     start = raw.index("\\xeCJKDeclareCharClass")
 
     def group_end(open_idx: int) -> int:

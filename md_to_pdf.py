@@ -13,8 +13,11 @@ LaTeX 风格（衬线字体、自动章节编号、booktabs 表格、定理式�
 用法:
     md-to-pdf input.md [输出目录] [--header 页眉文字] [--cover-color #RRGGBB]
                     [--no-numbers] [--no-toc] [--toc-depth 3] [--keep-aux] [--open]
+                    [--template 我的模板.tex]
     md-to-pdf            # 不带参数启动图形界面（拖入 .md 即可转换）
 
+排版规则放在可替换的模板文件里：缺省用 templates/default.tex（= 本工具原有风格），
+用 --template 指向别的 .tex 即可整体换一套导言区/排版规则。
 产物: <同名>.tex（可编辑的 LaTeX 中间产物）与 <同名>.pdf。
 依赖: 本机安装 xelatex（TinyTeX/MiKTeX/TeX Live 均可，见 install_tex.ps1）。
 """
@@ -239,183 +242,77 @@ def symbol_fallback_preamble() -> str:
     return "\n".join(lines) + "\n"
 
 # ---------------------------------------------------------------------------
-# CTEXART_TEMP_PREAMBLE —— LaTeX 导言区，基于 workspace 的 ctexart-temp.tex 模板
-# （latex模板/article-cn/ctexart-temp.tex），保留其宏包/定理环境/算法环境/列类型/命令宏，
-# 增量：①紧凑页边距 ②封面纯色背景+黑字 ③页眉页脚居中（ctexart-temp2 风格）。
-# 内嵌在脚本里：生成 .tex 时输出，打包 exe 亦自包含。
+# 排版模板（LaTeX 导言区）
 # ---------------------------------------------------------------------------
-CTEXART_TEMP_PREAMBLE = r"""% -*- coding: utf-8 -*-
-% !TEX program = xelatex
-% 本文件由 md-to-pdf 生成；LaTeX 风格基于 latex模板/article-cn/ctexart-temp.tex
+# 排版规则不再硬编码在脚本里，而是放在 templates 目录的 default.tex —— 它就是
+# 默认模板，内容即原 CTEXART_TEMP_PREAMBLE（基于 latex模板/article-cn/ctexart-temp.tex）。
+# 生成 .tex 时把它拼在正文之前，并替换两个占位符：
+#   __SYMBOL_FALLBACKS__  正文符号回退表（必须紧接 \documentclass，见模板内注释）
+#   __PAGE_HEADER__       页眉文字
+# 想整体换一套排版规则：用 --template 指向另一个 .tex 模板（如 A5 双栏、期刊样式）。
+# 打包 exe 时 templates 目录由 PyInstaller 收进解包目录（见 build_exe.ps1 --add-data）。
+TEMPLATE_DIRNAME = "templates"
+DEFAULT_TEMPLATE_NAME = "default.tex"
+# 模板里的两个占位符。替换是**全文文本替换**（str.replace），所以模板注释里
+# 一旦写出完整字面量，会被一起替换掉、导言区错位——load_template 用"必须恰好
+# 出现一次"把这种情况拦成明确报错，而不是生成一份编译失败或符号空白的 .tex。
+PLACEHOLDER_SYMBOLS = "__SYMBOL_FALLBACKS__"
+PLACEHOLDER_HEADER = "__PAGE_HEADER__"
 
-\documentclass[zihao=-4]{ctexart}
 
-%----- 正文符号回退（必须紧接 \documentclass，不能往后挪）-----
-% 原理：字符"活动化"只在**记号化之前**生效。导言区后面的
-% \fancyhead[C]{\small 页眉文字} 会先把页眉读成记号；若那一刻 ∀ 还不是活动字符，
-% 这个记号就被冻成普通字符，页眉里的 ∀ 又会渲染成空白（正文不受影响：正文
-% 要等开始排版之后才记号化）。所以这段必须放在任何会捕获正文文字的宏之前。
-__SYMBOL_FALLBACKS__
+def templates_dir() -> Path:
+    """模板目录：源码运行时取脚本同级的 templates；打包 exe 取 PyInstaller 解包目录。"""
+    meipass = getattr(sys, "_MEIPASS", None)
+    if meipass:
+        bundled = Path(meipass) / TEMPLATE_DIRNAME
+        if bundled.is_dir():
+            return bundled
+    return Path(__file__).resolve().parent / TEMPLATE_DIRNAME
 
-\usepackage{amsmath,amsthm,amssymb}
-\usepackage[version=4]{mhchem} % \ce{...} 化学/核素符号（同位素、核反应），物理学讲义常用
-\usepackage{siunitx} % \SI{...}{...} 物理单位（不用的文档无影响，见 install_tex.ps1）
-\usepackage{mathrsfs}
-\usepackage{graphicx}
-\usepackage{subfig}
-\usepackage{color,xcolor}
-\usepackage{enumitem}
-\usepackage[normalem]{ulem}
-\usepackage{float}
-\usepackage{caption}
-\usepackage{pifont}
-\usepackage{tabularx}
-\usepackage{booktabs}
-\usepackage{array}
-\usepackage{multirow,multicol}
-\usepackage{longtable}
-\usepackage{makecell}
-% 表格行距：中文表格上下行默认太挤，放大行高（对 tabular / longtable 均生效）
-\renewcommand{\arraystretch}{1.5}
-\usepackage{anyfontsize}
-\usepackage{geometry}
-\geometry{left=2cm,right=2cm,top=2cm,bottom=2.2cm} % 紧凑页边距（原模板 1.25in/1in）
-\setlength{\headheight}{18pt}
-\setlength{\headsep}{14pt}
-\setlength{\footskip}{22pt}
 
-%----- 页眉页脚（居中，ctexart-temp2 的 oneside 风格）-----
-\usepackage{fancyhdr}
-\pagestyle{fancy}
-\fancyhf{}
-\fancyhead[C]{\small __PAGE_HEADER__}
-\fancyfoot[C]{\small 第 \thepage\ 页}
-\renewcommand{\headrulewidth}{0.4pt}
-\renewcommand{\footrulewidth}{0pt}
+def default_template_path() -> Path:
+    """默认模板路径（templates/default.tex）。"""
+    return templates_dir() / DEFAULT_TEMPLATE_NAME
 
-%----- 设置超链接 -----
-\usepackage{hyperref}
-\hypersetup{
-  colorlinks=true,
-  linkcolor=black,
-  citecolor=blue,
-  filecolor=blue,
-  urlcolor=blue
-}
 
-% 允许多行公式跨页显示
-\allowdisplaybreaks
+def load_template(path: "str | os.PathLike[str] | None" = None) -> str:
+    r"""读取排版模板；path 为空（None/""）时用默认模板。
 
-%----- 交给 CJK 字体的码位（xeCJK 字符类）-----
-% 为什么需要：中文字体（SimSun/FangSong）自带的符号远比西文主字体（Latin Modern）
-% 多。落在西文字体上的符号，LM 没有字形就只有空白（如 Ⅰ Ⅱ Ⅲ、■ □、─ │、′ ″）。
-% 这里声明为 CJK 字符类的码位，改由中文字体排版。
-% 依据实测（measure_coverage.py 会重算）：只声明"SimSun 与 FangSong 都有字形、
-% 且 Latin Modern 没有"的码位。**每段必须是连续区间**——段内一旦夹着西文字体
-% 本来就能显示的字符，声明过去反而会把它弄坏。改完跑 test_symbol_fallback.py。
-\xeCJKDeclareCharClass{CJK}{
-  "0370 -> "03FF,                          % 希腊字母（3σ、均值 μ）
-  "2015, "2032 -> "2033, "2035,            % ― 角分秒 ′ ″ ‵
-  "2070 -> "209F,                          % 上下标 ⁰¹² ₀₁₂（中文字体有字形的部分）
-  "2105, "2109, "2121,                     % ℅ ℉ ℡
-  "2160 -> "216B, "2170 -> "2179,          % 罗马数字 Ⅰ-Ⅻ 与 ⅰ-ⅹ
-  "2190 -> "21FF,                          % 箭头 → ← ↑ ↓ ↖↗↘↙
-  "2200 -> "22FF,                          % 数学运算符 ∈ ∑ ∏ √ ≤ ≥ ∴ ∵ 等
-  "2312,                                   % ⌒
-  "2460 -> "24FF,                          % 带圈数字 ①②③ ⑴⒈
-  "2500 -> "254B, "2550 -> "2573,          % 制表符 ─ │ ┌ ┐ └ ┘ ├ ┤
-  "2581 -> "258F, "2593 -> "2595,          % 方块元素 ▁▂▃█▌▐
-  "25A0 -> "25A1, "25B2 -> "25B3, "25BC -> "25BD, "25C6 -> "25C7,
-  "25CB, "25CE -> "25CF, "25E2 -> "25E5,   % ■□▲△▼▽◆◇○◎●◢◣◤◥
-  "2605 -> "2606, "2609, "2640, "2642     % ★☆☉♀♂
-}
+    硬校验三件事（都是用户输入问题，报错要能直接定位）：
 
-%----- 设置编号格式 -----
-\numberwithin{equation}{section}
-\numberwithin{figure}{section}
-\numberwithin{table}{section}
+    1. 文件存在；
+    2. 含 \begin{document}（否则拼出的 .tex 不完整，xelatex 失败但位置难找）；
+    3. 两个占位符**至多出现一次**——多于一次必然是模板注释里写了字面量，
+       全文替换会让导言区错位（例如把符号回退整段插进注释、落到
+       \documentclass 之前，编译就报 \IfFontExistsTF 未定义）。
 
-%----- 重新设置图表公式 autoref -------
-\renewcommand{\figureautorefname}{图}
-\renewcommand{\tableautorefname}{表}
-\renewcommand{\equationautorefname}{公式}
+    占位符**缺失**不在这里报错，由 build_tex 记警告：漏掉符号回退的后果是
+    符号静默变空白（xelatex 只在 .log 里写 Missing character，不报错也不中断）。
+    """
+    p = Path(path) if path else default_template_path()
+    if not p.is_file():
+        raise FileNotFoundError(
+            f"排版模板不存在：{p}"
+            f"（默认模板应为 {default_template_path()}；也可用 --template 指定其它模板文件）")
+    text = p.read_text(encoding="utf-8")
+    # \begin{document} 必须恰好一次：它是注入点（封面配色 / 编号深度 / 目录深度 /
+    # PDF 元数据都插在它前面）。多于一次说明注释里写了字面量，注入块会被插进注释，
+    # 实测表现为 \hypersetup 未定义之类的编译失败。
+    n_doc = text.count(r"\begin{document}")
+    if n_doc != 1:
+        raise ValueError(
+            f"模板里的 \\begin{{document}} 出现 {n_doc} 次，必须恰好一次：{p}\n"
+            f"（常见原因：把 \\begin{{document}} 写进了注释。md-to-pdf 做全文替换，"
+            f"注释里的也会被注入块替换掉，导致导言区错位）")
+    for token, what in ((PLACEHOLDER_SYMBOLS, "符号回退"), (PLACEHOLDER_HEADER, "页眉")):
+        n = text.count(token)
+        if n > 1:
+            raise ValueError(
+                f"模板里「{what}」占位符出现了 {n} 次，必须恰好一次：{p}\n"
+                f"（常见原因：把 {token} 写进了注释；md-to-pdf 做全文替换，"
+                f"注释里的也会被替换掉，导致导言区错位）")
+    return text
 
-%----- 算法环境 -----
-\usepackage{algorithm}
-\usepackage{algpseudocode}
-\floatname{algorithm}{算法}
-\algrenewcommand\algorithmicrequire{\textbf{输入:}}
-\algrenewcommand\algorithmicensure{\textbf{输出:}}
-
-%----- 列表样式（紧凑）-----
-\setlist{nolistsep}
-
-%----- 图片路径（md-to-pdf 把本地图片复制到 ./images/）-----
-\graphicspath{{./}{./images/}}
-
-%----- tabularx 新列类型 -----
-\newcolumntype{L}{X}
-\newcolumntype{C}{>{\centering \arraybackslash}X}
-\newcolumntype{R}{>{\raggedleft \arraybackslash}X}
-\newcolumntype{P}[1]{>{\centering \arraybackslash}p{#1}}
-
-%----- 数学定理设置 -----
-\theoremstyle{plain}
-\newtheorem{definition}{定义}[section]
-\newtheorem{proposition}{命题}[section]
-\newtheorem{lemma}{引理}[section]
-\newtheorem{theorem}{定理}[section]
-\newtheorem{example}{例}
-\newtheorem{corollary}{推论}[section]
-\newtheorem{remark}{注}[section]
-
-%----- 微分符号 / 常用命令（来自模板）-----
-\newcommand{\dif}{\mathop{}\!\mathrm{d}}
-\newcommand{\CC}{\ensuremath{\mathbb{C}}}
-\newcommand{\RR}{\ensuremath{\mathbb{R}}}
-\newcommand{\abs}[1]{\lvert#1\rvert}
-\newcommand{\norm}[1]{\lVert#1\rVert}
-\newcommand{\dx}[1][x]{\mathop{}\!\mathrm{d}#1}
-\newcommand{\ii}{\mathrm{i}\mkern1mu}
-\newcommand{\refe}[2]{(\ref{#1})--(\ref{#2})}
-\newcommand{\A}{\mathcal{A}}
-\newcommand{\bA}{\boldsymbol{A}}
-\newcommand{\red}[1]{\textcolor{red}{#1}}
-
-%----- 代码块（listings）-----
-\usepackage{listings}
-\lstset{
-  basicstyle=\ttfamily\small,
-  frame=single, framerule=0.3pt, rulecolor=\color{gray!50},
-  backgroundcolor=\color{gray!7},
-  breaklines=true, columns=fullflexible,
-  showstringspaces=false, keepspaces=true,
-  aboveskip=2pt, belowskip=2pt,
-}
-
-%----- 要点框（tip/warn/key，tcolorbox，可跨页）-----
-% 标题栏：浅彩底 + 深色加粗字（colbacktitle 必须显式设浅色，否则默认取深色边框导致看不清）
-% 注：GitHub 告示框 [!NOTE]/[!TIP]/[!IMPORTANT]/[!WARNING]/[!CAUTION] 分别映射到
-% notebox（蓝）/ tipbox（绿）/ keybox（紫）/ warnbox（橙）/ cautionbox（红）。
-\usepackage[most]{tcolorbox}
-\newtcolorbox{tipbox}[1][要点]{breakable,enhanced,colback=green!8,colframe=green!55!black,colbacktitle=green!12!white,coltitle=black!80,fonttitle=\bfseries,title={#1},boxrule=0.5pt,arc=1.5mm,left=2mm,right=2mm,top=1.5mm,bottom=1.5mm}
-\newtcolorbox{warnbox}[1][注意]{breakable,enhanced,colback=orange!8,colframe=orange!70!black,colbacktitle=orange!18!white,coltitle=black!80,fonttitle=\bfseries,title={#1},boxrule=0.5pt,arc=1.5mm,left=2mm,right=2mm,top=1.5mm,bottom=1.5mm}
-\newtcolorbox{keybox}[1][核心]{breakable,enhanced,colback=violet!8,colframe=violet!60!black,colbacktitle=violet!14!white,coltitle=black!80,fonttitle=\bfseries,title={#1},boxrule=0.5pt,arc=1.5mm,left=2mm,right=2mm,top=1.5mm,bottom=1.5mm}
-\newtcolorbox{notebox}[1][注意]{breakable,enhanced,colback=blue!8,colframe=blue!55!black,colbacktitle=blue!12!white,coltitle=black!80,fonttitle=\bfseries,title={#1},boxrule=0.5pt,arc=1.5mm,left=2mm,right=2mm,top=1.5mm,bottom=1.5mm}
-\newtcolorbox{cautionbox}[1][小心]{breakable,enhanced,colback=red!8,colframe=red!60!black,colbacktitle=red!12!white,coltitle=black!80,fonttitle=\bfseries,title={#1},boxrule=0.5pt,arc=1.5mm,left=2mm,right=2mm,top=1.5mm,bottom=1.5mm}
-
-%----- 普通引用（引述文本）：浅灰底 + 左侧竖条，无标题 -----
-% 与上面五种彩色告示框同族但**中性**：不带标记的 `> 引用` 也该有排版（原先只是两侧
-% 缩进的 \begin{quote}，看上去和正文没差别）。boxrule=0pt + leftrule：只画一条左竖条，
-% 灰底色不抢眼，读者一眼能把"引述别人的话"与"作者自己的话"分开。
-\newtcolorbox{mdpdfquote}{breakable,enhanced,colback=black!4,colframe=black!45,boxrule=0pt,leftrule=1.6pt,arc=0.8mm,left=3mm,right=2.5mm,top=2mm,bottom=2mm}
-
-%----- 封面：纯色背景 + 黑字（--cover-color 可改；默认白色纸张色）-----
-\newcommand{\mdcovercolor}[1]{\definecolor{coverbg}{HTML}{#1}}
-\definecolor{coverbg}{HTML}{FFFFFF}
-
-\begin{document}
-"""
 
 # ---------------------------------------------------------------------------
 # LaTeX 转义
@@ -1158,7 +1055,7 @@ def build_tex(meta: dict, body_md: str, opts: argparse.Namespace, ctx) -> str:
         section_pre = r"\setcounter{section}{1}"  # 隐含"第 1 章"，首个 ## 即 1.1
     body = parse_blocks(body_md.splitlines(), ctx)
 
-    # ---- 组装（导言区 = ctexart-temp 模板 + 紧凑 + 封面，见 CTEXART_TEMP_PREAMBLE）----
+    # ---- 组装（导言区 = 排版模板，默认 templates/default.tex，见 load_template）----
     author = next((v for k, v in meta["items"] if k in ("作者", "author")), "")
     secnum = 3 if not no_numbers else 0
     if opts.toc:
@@ -1169,8 +1066,17 @@ def build_tex(meta: dict, body_md: str, opts: argparse.Namespace, ctx) -> str:
     else:
         toc = []
 
-    preamble = CTEXART_TEMP_PREAMBLE.replace("__PAGE_HEADER__", tex_escape(sq(header)))
-    preamble = preamble.replace("__SYMBOL_FALLBACKS__", symbol_fallback_preamble())
+    template = load_template(getattr(opts, "template", None))
+    # 占位符缺失不会让编译失败，后果都是"静默"的（符号空白 / 页眉不显示），
+    # 所以必须显式提示，否则用户只会以为"排版本来就这样"。
+    if PLACEHOLDER_SYMBOLS not in template:
+        ctx.warnings.append(
+            f"模板缺少 {PLACEHOLDER_SYMBOLS}：正文与页眉里的 ∀ ⊆ ⇒ 等符号会静默渲染为空白")
+    if PLACEHOLDER_HEADER not in template:
+        ctx.warnings.append(
+            f"模板缺少 {PLACEHOLDER_HEADER}：--header 与 front matter 的「页眉」将被忽略")
+    preamble = template.replace(PLACEHOLDER_HEADER, tex_escape(sq(header)))
+    preamble = preamble.replace(PLACEHOLDER_SYMBOLS, symbol_fallback_preamble())
     # --no-numbers 时去掉 "图 0.1" 这类带空 chapter/section 前缀的编号，
     # 让图/表/公式退化为纯连续编号（图1、表1、(1)），避免出现 "0.x" 前缀。
     counter_reset = (
@@ -1320,7 +1226,8 @@ def _is_ascii(s: str) -> bool:
 def _default_opts(**overrides) -> argparse.Namespace:
     """构造一组与 CLI 默认一致的参数（供 GUI 调用 build_tex 使用）。"""
     d = dict(title=None, subtitle=None, header=None, cover_color=None,
-             no_numbers=False, toc=True, toc_depth=3, keep_aux=False)
+             no_numbers=False, toc=True, toc_depth=3, keep_aux=False,
+             template=None)
     d.update(overrides)
     return argparse.Namespace(**d)
 
@@ -1428,6 +1335,9 @@ def main(argv: list[str] | None = None) -> int:
     ap.add_argument("--toc-depth", type=int, choices=[1, 2, 3, 4], default=3,
                     help="目录深度 1–4（默认 3 = 含三级标题；2 = 只到二级）")
     ap.add_argument("--keep-aux", action="store_true", help="保留编译中间文件（.aux/.log 等）")
+    ap.add_argument("--template", default=None, metavar="模板.tex",
+                    help="排版模板（LaTeX 导言区）；缺省用内置默认模板 templates/default.tex。"
+                         "模板须含 __PAGE_HEADER__ / __SYMBOL_FALLBACKS__ 占位符与 \\begin{document}")
     ap.add_argument("--open", action="store_true", help="生成后打开 PDF")
     ap.add_argument("--gui", action="store_true",
                     help="启动图形界面（拖入 .md 文件即可转换）")
@@ -1452,7 +1362,9 @@ def main(argv: list[str] | None = None) -> int:
 
     try:
         tex_path, pdf, ctx = convert_file(md_path, out_dir, keep_aux=args.keep_aux, opts=args)
-    except (FileNotFoundError, RuntimeError) as e:
+    except (FileNotFoundError, ValueError, RuntimeError) as e:
+        # ValueError 来自模板校验（如缺 \begin{document}）：属用户输入问题，
+        # 打印一句错误即可，不该抛后台堆栈。
         print(f"错误：{e}", file=sys.stderr)
         return 1
 

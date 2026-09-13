@@ -1,10 +1,11 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
-"""md-to-pdf 图形界面——把 .md 文件拖进窗口即可转换为 LaTeX 源码 + PDF。
+r"""md-to-pdf 图形界面——把 .md 文件拖进窗口即可转换为 LaTeX 源码 + PDF。
 
 - 窗口标题「md-to-pdf 转换器」，把 Markdown（.md）文件拖进来（或点「选择文件」）。
 - 转换逻辑复用 md_to_pdf.py 的 convert_file（LaTeX 表格 / 代码高亮 / 数学公式等特性全部保留）。
 - 产物 <同名>.tex 与 <同名>.pdf 写入当前 md 所在目录；同名文件已存在时弹出覆盖确认。
+- 「排版模板」留空即用内置默认模板 templates\default.tex；选别的 .tex 可整体换一套排版规则。
 - 出错时在窗口内显示错误摘要，不打印后台堆栈。
 
 界面风格与 video-to-md（D:/workspace/_skill_tool/video-to-md）保持一致：深色顶栏 + 卡片式布局 + 彩色记录区。
@@ -118,8 +119,8 @@ class MdToPdfApp:
         else:
             self.root = tk.Tk()
         self.root.title("md-to-pdf 转换器")
-        self.root.geometry("640x620")
-        self.root.minsize(580, 540)
+        self.root.geometry("640x690")
+        self.root.minsize(580, 610)
         self.root.configure(bg=_BG)
         self.root.protocol("WM_DELETE_WINDOW", self.root.destroy)
 
@@ -168,6 +169,27 @@ class MdToPdfApp:
         tk.Label(opt_inner, text="（# 记 1 级、## 记 2 级…；选「无目录」则不生成目录页）",
                  font=(_FONT, 8), bg=_CARD, fg=_MUTED).pack(side="left", padx=10)
 
+        # 2b) 选项行：排版模板（留空 = 内置默认模板 templates\default.tex）
+        tpl_card, tpl_inner = _card(body)
+        tpl_card.pack(fill="x", pady=(8, 0))
+        tpl_row = tk.Frame(tpl_inner, bg=_CARD)
+        tpl_row.pack(fill="x")
+        tk.Label(tpl_row, text="排版模板", font=(_FONT, 9, "bold"),
+                 bg=_CARD, fg="#33415f").pack(side="left", padx=(14, 8), pady=9)
+        # 先 pack 右侧按钮，再 pack 可拉伸的输入框：Tk 按 pack 顺序分配空间，
+        # 若输入框先 pack 且 expand=True，会把剩余空间吃光导致按钮被挤出可视区。
+        self._add_btn(tpl_row, "默认", self._reset_template, padx=(0, 14), side="right")
+        self._add_btn(tpl_row, "浏览…", self._choose_template, padx=(0, 6), side="right")
+        self.template_var = tk.StringVar(value="")
+        tk.Entry(tpl_row, textvariable=self.template_var, font=(_FONT, 9),
+                 relief="flat", bd=0, highlightthickness=1,
+                 highlightbackground="#d9dfec", bg="#fbfcfe", fg=_TEXT).pack(
+            side="left", fill="x", expand=True, pady=9)
+        tk.Label(tpl_inner,
+                 text="留空 = 内置默认模板（templates\\default.tex，即本工具原有排版）；"
+                      "选其它 .tex 即整体换一套排版规则",
+                 font=(_FONT, 8), bg=_CARD, fg=_MUTED).pack(anchor="w", padx=14, pady=(0, 8))
+
         # 3) 记录卡片
         log_card, log_inner = _card(body)
         log_card.pack(fill="both", expand=True, pady=(14, 0))
@@ -202,7 +224,7 @@ class MdToPdfApp:
             self._log("拖拽不可用（未加载 tkinterdnd2/tkdnd），请用「选择文件」，或运行 "
                       "pip install tkinterdnd2 后重启。", "dim")
 
-    def _add_btn(self, parent, text, cmd, primary=False, padx=(0, 0)):
+    def _add_btn(self, parent, text, cmd, primary=False, padx=(0, 0), side="left"):
         if primary:
             b = tk.Button(parent, text=text, command=cmd, font=(_FONT, 10),
                           bg=_ACCENT, fg="#ffffff", activebackground=_ACCENT_DARK,
@@ -213,7 +235,7 @@ class MdToPdfApp:
                           bg="#e7ebf5", fg=_TEXT, activebackground="#d5dcec",
                           activeforeground=_TEXT, relief="flat", bd=0,
                           padx=12, pady=6, cursor="hand2")
-        b.pack(side="left", padx=padx)
+        b.pack(side=side, padx=padx)
         return b
 
     # ---- 拖拽注册 ----
@@ -254,6 +276,21 @@ class MdToPdfApp:
         if files:
             self._handle_paths(files)
 
+    def _choose_template(self):
+        """选一个 .tex 排版模板；取消则保持原值。"""
+        init = Path(self.template_var.get()).parent if self.template_var.get().strip() else None
+        path = filedialog.askopenfilename(
+            title="选择排版模板（.tex 导言区）",
+            initialdir=str(init) if init and init.is_dir() else str(md_to_pdf.templates_dir()),
+            filetypes=[("LaTeX 模板", "*.tex"), ("全部文件", "*.*")],
+            parent=self.root)
+        if path:
+            self.template_var.set(path)
+
+    def _reset_template(self):
+        """清空输入框 → 回到内置默认模板。"""
+        self.template_var.set("")
+
     # ---- 转换调度 ----
     def _handle_paths(self, paths):
         md_paths = [p for p in paths if Path(p).suffix.lower() == ".md"]
@@ -267,9 +304,15 @@ class MdToPdfApp:
             jobs.append((md, self._resolve_out_stem(md)))
         # 选项也在主线程读（tk 变量不跨线程碰），随 jobs 一起交给工作线程
         toc, toc_depth = toc_options(self.toc_var.get())
-        opts = md_to_pdf._default_opts(toc=toc, toc_depth=toc_depth)
+        template = self.template_var.get().strip()
+        if template and not Path(template).is_file():
+            self._log(f"排版模板不存在，请重新选择：{template}", "err")
+            return
+        opts = md_to_pdf._default_opts(toc=toc, toc_depth=toc_depth,
+                                       template=template or None)
         self._busy = True
-        self._log(f"开始转换 {len(jobs)} 个文件…（目录层级：{self.toc_var.get()}）", "dim")
+        self._log(f"开始转换 {len(jobs)} 个文件…（目录层级：{self.toc_var.get()}；"
+                  f"排版模板：{Path(template).name if template else '默认'}）", "dim")
         threading.Thread(target=self._worker, args=(jobs, opts), daemon=True).start()
 
     def _resolve_out_stem(self, md: Path) -> str:

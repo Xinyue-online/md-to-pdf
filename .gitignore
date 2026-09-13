@@ -1,6 +1,9 @@
 # PyInstaller 构建中间产物（可由 build_exe.ps1 完全重新生成）
 /build/
 
+# 自测脚本的临时产物（test_symbol_fallback.py 每次运行重建，可随时删）
+/_symtest/
+
 # Python 缓存
 __pycache__/
 *.pyc
