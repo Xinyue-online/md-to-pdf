@@ -1,6 +1,32 @@
 % -*- coding: utf-8 -*-
 % !TEX program = xelatex
 % 本文件由 md-to-pdf 生成；LaTeX 风格基于 latex模板/article-cn/ctexart-temp.tex
+%
+% ===========================================================================
+% md-to-pdf 默认排版模板（LaTeX 导言区）。md-to-pdf 的排版规则都在这里。
+%
+% 用法：想换一套规则，把本文件复制一份改掉，然后
+%     md-to-pdf 讲义.md --template 我的模板.tex
+% （GUI 里也有「排版模板」一栏可选；留空即用本默认模板。）
+%
+% 模板契约 —— 三样东西不能少（照抄本文件、别删即可）：
+%   1) 紧接 \documentclass 的那行「符号回退占位符」：两个下划线夹住
+%      SYMBOL 与 FALLBACKS 的那个词。md-to-pdf 会把它换成符号回退表。
+%      它必须是文件里唯一一处、且紧跟 \documentclass —— 删掉或挪后，
+%      正文与页眉里的 ∀ ⊆ ⇒ 会静默渲染成空白（xelatex 不报错）。
+%   2) fancyhdr 页眉那行的「页眉占位符」：两个下划线夹住 PAGE 与 HEADER
+%      的那个词。md-to-pdf 换成 --header / front matter 的页眉文字。
+%   3) 正文起点标记（\begin 加 document 的那个环境开头，本文件末尾）——
+%      md-to-pdf 在它前面插入封面配色、编号深度、目录深度与 PDF 元数据，
+%      再拼上封面 / 目录 / 正文。
+%
+% 注意：上面三样东西（两个占位符 + 正文起点标记）都**不要在本注释里写出完整
+% 字面量**——md-to-pdf 做的是全文文本替换，注释里写全了会被一起替换掉、
+% 导言区错位。（load_template 已加"必须恰好出现一次"的校验来拦这种情况。）
+%
+% 改完模板后建议跑一次：python md_to_pdf.py example.md
+% 新增宏包记得装：tlmgr install <包名>（TinyTeX 见 install_tex.ps1）。
+% ===========================================================================
 
 \documentclass[zihao=-4]{ctexart}
 
@@ -351,11 +377,12 @@
 \newcommand{\mdcovercolor}[1]{\definecolor{coverbg}{HTML}{#1}}
 \definecolor{coverbg}{HTML}{FFFFFF}
 
+\providecommand{\mdcovercolor}[1]{\definecolor{coverbg}{HTML}{#1}}
 \mdcovercolor{FFFFFF}
 \setcounter{secnumdepth}{3}
 \setcounter{tocdepth}{3}
 
-\hypersetup{pdftitle={Python 数据分析实战笔记}, pdfauthor={示例作者}}
+\ifdefined\hypersetup\hypersetup{pdftitle={Python 数据分析实战笔记}, pdfauthor={示例作者}}\fi
 
 \begin{document}
 
@@ -408,14 +435,14 @@
 \setcounter{page}{1}
 
 \begin{keybox}[使用说明]
-本文演示 md-to-pdf 的全部特性：封面 front matter、LaTeX 自动章节编号、表格、代码块高亮、嵌套/任务列表、引用、脚注、数学公式、要点框、强制分页与图片。数学公式由 LaTeX \textbf{原生渲染}，无需 KaTeX。
+本文演示 md-to-pdf 的全部特性：封面 front matter、LaTeX 自动章节编号、表格、代码块高亮、嵌套与任务列表、引用、脚注、数学公式、要点框、强制分页、图片。公式由 LaTeX 原生渲染，不需要 KaTeX。
 \end{keybox}
 
 \section{数据读取与清洗}
 
 \subsection{读取 CSV}
 
-读取文件用标准库或 pandas 均可，注意编码与缺失值处理。行内的强调包括\textbf{加粗}、\emph{斜体}、\sout{删除线}、行内代码 \texttt{pd.read\_csv}，以及文字中的特殊字符：50\% 完成、a\_b、C++、\{花括号\}、\# 号、\$ 符号。
+读取文件用标准库或 pandas 都行，注意编码与缺失值。下面这段演示行内强调：\textbf{加粗}、\emph{斜体}、\sout{删除线}、行内代码 \texttt{pd.read\_csv}，以及需要转义的特殊字符：50\% 完成、a\_b、C++、\{花括号\}、\# 号、\$ 符号。
 
 \noindent \begin{lstlisting}[language=Python]
 import pandas as pd
@@ -481,7 +508,7 @@ print(df.head())
 
 \subsection{数学符号（正文直写即可）}
 
-中文字体缺字形的常用符号已内置回退（v1.0.5 起），正文里直接写即可，不必包 \texttt{\$...\$}：对 ∀ε>0 存在 ∃δ>0；A ⊂ B ⊆ C；x ↦ y；a ⇔ b；空集 ∅、偏导 ∂、梯度 ∇、张量积 ⊗；角标 10⁻³、m³、v₀、a₁、x²+y²；x∈ℝ、⌈x⌉≥x；✓ 通过 ✗ 未通过。
+中文字体缺字形的常用符号已经内置回退，正文里直接写就行，不必包 \texttt{\$...\$}：对 ∀ε>0 存在 ∃δ>0；A ⊂ B ⊆ C；x ↦ y；a ⇔ b；空集 ∅、偏导 ∂、梯度 ∇、张量积 ⊗；角标 10⁻³、m³、v₀、a₁、x²+y²；x∈ℝ、⌈x⌉≥x；✓ 通过 ✗ 未通过。
 
 \noindent \begin{tabularx}{\linewidth}{lL}
 \toprule
@@ -498,9 +525,9 @@ print(df.head())
 表里没收录的冷僻符号仍可写成 \texttt{\$\textbackslash{}gtrsim\$} 这样的数学式；确实常用的可以加进 \texttt{md\_to\_pdf.py} 的 \texttt{SYMBOL\_FALLBACKS}。
 \end{tipbox}
 
-\subsection{表情与警示标记（v1.0.6 起）}
+\subsection{表情与警示标记}
 
-正文里可直接写 ❗ ⚠ 💡（带变体选择符的 ❗ ⚠ 💡 效果相同），PDF 里会显示成对应图标。
+正文里可以直接写 ❗ ⚠ 💡（带变体选择符的 ❗ ⚠ 💡 效果相同），PDF 里显示成对应图标。
 
 以标记开头的引用块会自动变成彩色告示框：
 
