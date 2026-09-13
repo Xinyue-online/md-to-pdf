@@ -257,31 +257,45 @@ example.md ──► md-to-pdf ──► example.tex ──► xelatex（循环�
 
 ## 换排版规则（--template）
 
-**排版规则全部在一个模板文件里**：`templates\default.tex` —— 它是 LaTeX 导言区（从 `\documentclass` 到 `\begin{document}`），不指定 `--template` 时用的就是它，也就是本工具原有风格。
+**排版规则全部在模板文件里**，位于 `templates\`：
 
-想整体换一套规则（页边距、字号、页眉页脚、代码样式、告示框配色、章节编号、定理环境…）：
+| 模板 | 风格 | 来源 |
+| --- | --- | --- |
+| `default.tex` | 紧凑讲义（版心 2cm，即本工具原有风格） | 默认，不指定 `--template` 时用它 |
+| `academic.tex` | 学术论文（版心 1.25in/1in，带 natbib 与 thm/algorithm 环境） | 由 `latex模板/article-cn/ctexart-temp.tex` 派生 |
 
 ```bash
-copy templates\default.tex 我的模板.tex        # 从默认模板改起
-# 编辑 我的模板.tex：例如把 \geometry{left=2cm,...} 改成你的版心
-python md_to_pdf.py 讲义.md --template 我的模板.tex
+python md_to_pdf.py 讲义.md --template academic          # 内置名即可
+python md_to_pdf.py 讲义.md --template academic.tex      # 带扩展名也行
+copy templates\default.tex 我的模板.tex                  # 想自己改：从默认模板复制
+python md_to_pdf.py 讲义.md --template 我的模板.tex      # 再指向它
 ```
 
-- **GUI 同款**：「排版模板」一栏留空 = 默认模板，点「浏览…」选 `.tex`。
-- **打包版 exe 也支持 `--template`**：换模板**不必重新打包**；改了默认模板或改了 py 才需要重跑 `build_exe.ps1`。
+- **GUI 同款**：「排版模板」是可编辑下拉框，选 `（默认）`/`academic`/`default`，也可直接粘路径或点「浏览…」；「默认」按钮回到 `（默认）`。
+- **打包版 exe 也支持 `--template`**：换模板**不必重新打包**；改了模板文件本身或改了 py 才要重跑 `build_exe.ps1`。
 - 模板里新增宏包要先装：`tlmgr install <包名>`（TinyTeX 与清华镜像见 `install_tex.ps1`）。
-- 改完跑一次 `python md_to_pdf.py example.md` 验证。
+- 改完跑一次 `python md_to_pdf.py example.md --template <你的模板>` 验证。
 
-**模板契约**——三样东西不能少（照抄默认模板即可）：
+### ⚠ 模板不是「任意 LaTeX 导言区都能套」
+
+md-to-pdf 产出的正文用到一批**模板必须提供**的定义：`listings`（代码块）、`tcolorbox` 加六个框环境（告示框 / 普通引用）、`ulem`（删除线）、`siunitx`、`mhchem`、`ctex` 与 `xcolor`（封面）。**把一份现成的论文 `.tex` 直接丢给 `--template` 会失败** —— 那些模板没有这些定义。
+
+- 缺什么会在**写 `.tex` 之前**查出来，报错直接列出"正文用到 X，但模板里没有 Y → 请加 Z"，而不是让你去看 xelatex 的 `Undefined control sequence` 行号；
+- 所以**最省事的做法是复制 `templates\default.tex` 或 `academic.tex` 再改样式**，而不是从零写一份导言区。
+
+**完整文档式模板**（自带摘要/正文/`\end{document}` 的成稿 `.tex`）：只取 `\begin{document}` 之前的导言区，模板自带的正文会被丢弃并给出告警 —— 否则会拼出双 `\end{document}` 的坏文件。
+
+**模板契约**——三样东西不能少（照抄内置模板即可）：
 
 | 标记 | md-to-pdf 拿它做什么 | 缺失/挪位的后果 |
 | --- | --- | --- |
 | `__SYMBOL_FALLBACKS__` | 换成正文符号回退表。**必须紧接 `\documentclass`** | 挪到 `\fancyhead` 之后，页眉里的 `∀` 变空白；整个删掉，正文与页眉的 `∀ ⊆ ⇒` 静默变空白（xelatex 只在 `.log` 写 `Missing character`，不报错） |
 | `__PAGE_HEADER__` | 换成 `--header` / front matter 的页眉文字 | 页眉不显示（转换结束会告警） |
-| `\begin{document}` | 正文起点；md-to-pdf 在它**前面**插入封面配色、编号深度、目录深度与 PDF 元数据，再拼封面 / 目录 / 正文 | 拼出的 `.tex` 不完整，编译失败 |
+| `\begin{document}` | 正文起点；md-to-pdf 在它**前面**插入封面配色、编号深度、目录深度与 PDF 元数据，再拼封面 / 目录 / 正文 | 报错（0 次或多次都不接受） |
 
 - 三个标记都必须**恰好出现一次**。它们走的是全文文本替换，所以写进**注释**里也会被替换掉、导言区错位（表现为 `\hypersetup` / `\IfFontExistsTF` 未定义之类的编译错误）——`load_template()` 会把这种情况拦成明确报错，不会生成坏文件。
-- **封面版式不在模板里**：封面由 `build_tex()` 用 Python 拼（模板只定义 `\mdcovercolor`）。改封面要动代码。
+- 注入块是**自给自足**的：`\mdcovercolor` 用 `\providecommand` 兜底、`\hypersetup` 有 `\ifdefined` 守卫，所以模板不定义它们也能编过。
+- **封面版式不在模板里**：封面由 `build_tex()` 用 Python 拼。改封面版式要动代码。
 
 ## 最小可测试结构
 
@@ -289,7 +303,9 @@ python md_to_pdf.py 讲义.md --template 我的模板.tex
 md-to-pdf/
 ├─ md_to_pdf.py          # 核心转换 + 命令行
 ├─ md_to_pdf_gui.py      # 图形界面（拖拽入口）
-├─ templates/default.tex # 默认排版模板（LaTeX 导言区；--template 换规则）
+├─ templates/            # 排版模板（--template 或 GUI 下拉选）
+│  ├─ default.tex        #   默认：紧凑讲义版心
+│  └─ academic.tex       #   学术论文版心（原 ctexart-temp 派生）
 ├─ test_symbol_fallback.py  # 符号自测：字符类清单 + 回退表逐符号 + 栅格 + 页眉 + 引述标记（需 xelatex）
 ├─ measure_coverage.py   # 符号覆盖实测：算该交给中文字体的码位 / 仍空白的码位
 ├─ install_tex.ps1    # 一键安装 TinyTeX

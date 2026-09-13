@@ -5,7 +5,7 @@ r"""md-to-pdf 图形界面——把 .md 文件拖进窗口即可转换为 LaTeX 
 - 窗口标题「md-to-pdf 转换器」，把 Markdown（.md）文件拖进来（或点「选择文件」）。
 - 转换逻辑复用 md_to_pdf.py 的 convert_file（LaTeX 表格 / 代码高亮 / 数学公式等特性全部保留）。
 - 产物 <同名>.tex 与 <同名>.pdf 写入当前 md 所在目录；同名文件已存在时弹出覆盖确认。
-- 「排版模板」留空即用内置默认模板 templates\default.tex；选别的 .tex 可整体换一套排版规则。
+- 「排版模板」下拉选内置模板（default / academic），或直接填 / 浏览一个 .tex 路径。
 - 出错时在窗口内显示错误摘要，不打印后台堆栈。
 
 界面风格与 video-to-md（D:/workspace/_skill_tool/video-to-md）保持一致：深色顶栏 + 卡片式布局 + 彩色记录区。
@@ -32,6 +32,23 @@ import md_to_pdf
 # 目录层级下拉：选项文字 → (是否生成目录, tocdepth)。「无目录」= 关闭目录页。
 TOC_CHOICES = ("无目录", "1 级", "2 级", "3 级", "4 级")
 TOC_DEFAULT = "3 级"
+
+# 排版模板下拉：「（默认）」对应 md_to_pdf 的 default.tex；其余是内置模板名。
+# 下拉框是可编辑的，也可以直接粘一个 .tex 路径进去。
+TEMPLATE_DEFAULT_LABEL = "（默认）"
+
+
+def template_options() -> list[str]:
+    """下拉候选：默认项 + templates 目录里的内置模板名（default / academic …）。"""
+    return [TEMPLATE_DEFAULT_LABEL] + sorted(md_to_pdf.builtin_templates())
+
+
+def template_value(choice: str) -> str | None:
+    """下拉/输入框的值 → convert_file 的 template 参数（None = 默认模板）。"""
+    v = (choice or "").strip()
+    if not v or v == TEMPLATE_DEFAULT_LABEL:
+        return None
+    return v
 
 
 def toc_options(choice: str) -> tuple[bool, int]:
@@ -169,25 +186,25 @@ class MdToPdfApp:
         tk.Label(opt_inner, text="（# 记 1 级、## 记 2 级…；选「无目录」则不生成目录页）",
                  font=(_FONT, 8), bg=_CARD, fg=_MUTED).pack(side="left", padx=10)
 
-        # 2b) 选项行：排版模板（留空 = 内置默认模板 templates\default.tex）
+        # 2b) 选项行：排版模板（「（默认）」= templates\default.tex）
         tpl_card, tpl_inner = _card(body)
         tpl_card.pack(fill="x", pady=(8, 0))
         tpl_row = tk.Frame(tpl_inner, bg=_CARD)
         tpl_row.pack(fill="x")
         tk.Label(tpl_row, text="排版模板", font=(_FONT, 9, "bold"),
                  bg=_CARD, fg="#33415f").pack(side="left", padx=(14, 8), pady=9)
-        # 先 pack 右侧按钮，再 pack 可拉伸的输入框：Tk 按 pack 顺序分配空间，
-        # 若输入框先 pack 且 expand=True，会把剩余空间吃光导致按钮被挤出可视区。
+        # 先 pack 右侧按钮，再 pack 可拉伸的下拉框：Tk 按 pack 顺序分配空间，
+        # 若下拉框先 pack 且 expand=True，会把剩余空间吃光导致按钮被挤出可视区。
         self._add_btn(tpl_row, "默认", self._reset_template, padx=(0, 14), side="right")
         self._add_btn(tpl_row, "浏览…", self._choose_template, padx=(0, 6), side="right")
-        self.template_var = tk.StringVar(value="")
-        tk.Entry(tpl_row, textvariable=self.template_var, font=(_FONT, 9),
-                 relief="flat", bd=0, highlightthickness=1,
-                 highlightbackground="#d9dfec", bg="#fbfcfe", fg=_TEXT).pack(
+        self.template_var = tk.StringVar(value=TEMPLATE_DEFAULT_LABEL)
+        # state="normal" = 可编辑：既可从下拉选内置模板，也能直接粘 .tex 路径
+        ttk.Combobox(tpl_row, textvariable=self.template_var, values=template_options(),
+                     state="normal", width=16, font=(_FONT, 9)).pack(
             side="left", fill="x", expand=True, pady=9)
         tk.Label(tpl_inner,
-                 text="留空 = 内置默认模板（templates\\default.tex，即本工具原有排版）；"
-                      "选其它 .tex 即整体换一套排版规则",
+                 text="内置模板：" + "、".join(sorted(md_to_pdf.builtin_templates()))
+                      + "（default = 紧凑讲义；academic = 学术论文版心）；也可直接填 .tex 路径",
                  font=(_FONT, 8), bg=_CARD, fg=_MUTED).pack(anchor="w", padx=14, pady=(0, 8))
 
         # 3) 记录卡片
@@ -278,9 +295,10 @@ class MdToPdfApp:
 
     def _choose_template(self):
         """选一个 .tex 排版模板；取消则保持原值。"""
-        init = Path(self.template_var.get()).parent if self.template_var.get().strip() else None
+        cur = template_value(self.template_var.get())
+        init = Path(cur).parent if cur else None
         path = filedialog.askopenfilename(
-            title="选择排版模板（.tex 导言区）",
+            title="选择排版模板（.tex）",
             initialdir=str(init) if init and init.is_dir() else str(md_to_pdf.templates_dir()),
             filetypes=[("LaTeX 模板", "*.tex"), ("全部文件", "*.*")],
             parent=self.root)
@@ -288,8 +306,8 @@ class MdToPdfApp:
             self.template_var.set(path)
 
     def _reset_template(self):
-        """清空输入框 → 回到内置默认模板。"""
-        self.template_var.set("")
+        """回到内置默认模板。"""
+        self.template_var.set(TEMPLATE_DEFAULT_LABEL)
 
     # ---- 转换调度 ----
     def _handle_paths(self, paths):
@@ -304,15 +322,15 @@ class MdToPdfApp:
             jobs.append((md, self._resolve_out_stem(md)))
         # 选项也在主线程读（tk 变量不跨线程碰），随 jobs 一起交给工作线程
         toc, toc_depth = toc_options(self.toc_var.get())
-        template = self.template_var.get().strip()
-        if template and not Path(template).is_file():
-            self._log(f"排版模板不存在，请重新选择：{template}", "err")
+        template = template_value(self.template_var.get())
+        # 用与转换时同一套解析（内置名 / 路径），先查存在性再起线程
+        if template is not None and not md_to_pdf.resolve_template_path(template).is_file():
+            self._log(f"排版模板不存在：{template}", "err")
             return
-        opts = md_to_pdf._default_opts(toc=toc, toc_depth=toc_depth,
-                                       template=template or None)
+        opts = md_to_pdf._default_opts(toc=toc, toc_depth=toc_depth, template=template)
         self._busy = True
         self._log(f"开始转换 {len(jobs)} 个文件…（目录层级：{self.toc_var.get()}；"
-                  f"排版模板：{Path(template).name if template else '默认'}）", "dim")
+                  f"排版模板：{Path(template).stem if template else '默认'}）", "dim")
         threading.Thread(target=self._worker, args=(jobs, opts), daemon=True).start()
 
     def _resolve_out_stem(self, md: Path) -> str:

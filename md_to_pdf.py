@@ -244,12 +244,16 @@ def symbol_fallback_preamble() -> str:
 # ---------------------------------------------------------------------------
 # 排版模板（LaTeX 导言区）
 # ---------------------------------------------------------------------------
-# 排版规则不再硬编码在脚本里，而是放在 templates 目录的 default.tex —— 它就是
-# 默认模板，内容即原 CTEXART_TEMP_PREAMBLE（基于 latex模板/article-cn/ctexart-temp.tex）。
-# 生成 .tex 时把它拼在正文之前，并替换两个占位符：
+# 排版规则不再硬编码在脚本里，而是放在 templates 目录的模板文件里：
+#   default.tex   默认模板（紧凑讲义风格，内容即原 CTEXART_TEMP_PREAMBLE）
+#   academic.tex  学术论文风格（原 latex模板/article-cn/ctexart-temp.tex 的版心与宏包）
+# 不指定 --template 时用 default.tex。生成 .tex 时把模板拼在正文之前，并替换两个
+# 占位符：
 #   __SYMBOL_FALLBACKS__  正文符号回退表（必须紧接 \documentclass，见模板内注释）
 #   __PAGE_HEADER__       页眉文字
-# 想整体换一套排版规则：用 --template 指向另一个 .tex 模板（如 A5 双栏、期刊样式）。
+# --template 既可给 .tex 路径，也可只给内置名（default / academic）。注意模板不是
+# 「任意 LaTeX 导言区都能套」：它必须自带本工具产出正文所需的定义（listings、
+# tcolorbox、符号回退表…），缺了会在 _template_missing_deps 里被挡下并列出补法。
 # 打包 exe 时 templates 目录由 PyInstaller 收进解包目录（见 build_exe.ps1 --add-data）。
 TEMPLATE_DIRNAME = "templates"
 DEFAULT_TEMPLATE_NAME = "default.tex"
@@ -275,29 +279,72 @@ def default_template_path() -> Path:
     return templates_dir() / DEFAULT_TEMPLATE_NAME
 
 
-def load_template(path: "str | os.PathLike[str] | None" = None) -> str:
+def builtin_templates() -> dict[str, Path]:
+    """内置模板：名称（不含扩展名）→ 路径。供 --template 简称与 GUI 下拉用。"""
+    d = templates_dir()
+    if not d.is_dir():
+        return {}
+    return {p.stem: p for p in sorted(d.glob("*.tex"))}
+
+
+def resolve_template_path(path: "str | os.PathLike[str] | None") -> Path:
+    """把 --template 的值解析成模板文件路径。
+
+    - 空值 → 默认模板；
+    - 已是存在的文件 → 直接用（相对路径按当前工作目录解析）；
+    - **不带目录分隔符**的名字（`academic`、`academic.tex`）→ 在内置 templates
+      目录里找。
+
+    注意：带路径的写法一旦不存在就直接报错，**不会**退回内置同名模板 ——
+    否则 `--template .\\default.tex` 打错字会静默用上内置模板，很难察觉。
+    """
+    if not path:
+        return default_template_path()
+    s = str(path)
+    p = Path(s)
+    if p.is_file():
+        return p
+    if os.sep not in s and "/" not in s:
+        cands = [templates_dir() / s]
+        if not s.endswith(".tex"):
+            cands.append(templates_dir() / (s + ".tex"))
+        for c in cands:
+            if c.is_file():
+                return c
+    return p
+
+
+def load_template(path: "str | os.PathLike[str] | None" = None,
+                  notes: list[str] | None = None) -> str:
     r"""读取排版模板；path 为空（None/""）时用默认模板。
 
-    硬校验三件事（都是用户输入问题，报错要能直接定位）：
+    硬校验（都是用户输入问题，报错要能直接定位）：
 
     1. 文件存在；
-    2. 含 \begin{document}（否则拼出的 .tex 不完整，xelatex 失败但位置难找）；
-    3. 两个占位符**至多出现一次**——多于一次必然是模板注释里写了字面量，
-       全文替换会让导言区错位（例如把符号回退整段插进注释、落到
-       \documentclass 之前，编译就报 \IfFontExistsTF 未定义）。
+    2. \begin{document} **恰好一次** —— 它是注入点（封面配色 / 编号深度 /
+       目录深度 / PDF 元数据都插在它前面）。0 次则拼出的 .tex 不完整；多于
+       一次说明注释里写了字面量，注入块会被插进注释（实测表现为
+       \hypersetup 未定义之类的编译失败）；
+    3. 两个占位符**至多一次** —— 同理，多于一次必然是注释里写了字面量。
 
-    占位符**缺失**不在这里报错，由 build_tex 记警告：漏掉符号回退的后果是
-    符号静默变空白（xelatex 只在 .log 里写 Missing character，不报错也不中断）。
+    **完整文档式模板**（自带正文与 \end{document}，如现成的论文 .tex）只取
+    \begin{document} 之前的导言区，模板自带的正文 / 摘要 / 参考文献会被丢弃，
+    并经 notes 回一条说明。md-to-pdf 自己生成封面与正文，模板的正文只会
+    拼出双 \end{document} 的坏文件。
+
+    占位符**缺失**不在这里报错（由 build_tex 记警告），但生成器产出正文所依赖
+    的定义（listings / tcolorbox / …）缺失会在 build_tex 里报硬错。
     """
-    p = Path(path) if path else default_template_path()
+    p = resolve_template_path(path)
     if not p.is_file():
+        hint = ""
+        builtins = builtin_templates()
+        if builtins:
+            hint = "；内置模板：" + "、".join(builtins)
         raise FileNotFoundError(
             f"排版模板不存在：{p}"
-            f"（默认模板应为 {default_template_path()}；也可用 --template 指定其它模板文件）")
+            f"（默认模板为 {default_template_path()}{hint}）")
     text = p.read_text(encoding="utf-8")
-    # \begin{document} 必须恰好一次：它是注入点（封面配色 / 编号深度 / 目录深度 /
-    # PDF 元数据都插在它前面）。多于一次说明注释里写了字面量，注入块会被插进注释，
-    # 实测表现为 \hypersetup 未定义之类的编译失败。
     n_doc = text.count(r"\begin{document}")
     if n_doc != 1:
         raise ValueError(
@@ -311,7 +358,61 @@ def load_template(path: "str | os.PathLike[str] | None" = None) -> str:
                 f"模板里「{what}」占位符出现了 {n} 次，必须恰好一次：{p}\n"
                 f"（常见原因：把 {token} 写进了注释；md-to-pdf 做全文替换，"
                 f"注释里的也会被替换掉，导致导言区错位）")
+    # 完整文档式模板：截到 \begin{document} 为止（含它本身，它是注入点）
+    end_doc = text.find(r"\end{document}")
+    if end_doc > text.find(r"\begin{document}"):
+        marker = r"\begin{document}"
+        text = text[: text.find(marker) + len(marker)] + "\n"
+        if notes is not None:
+            notes.append(
+                f"模板「{p.name}」是完整文档（自带正文与 \\end{{document}}）："
+                f"已只取 \\begin{{document}} 之前的导言区，模板自带的正文/摘要/参考文献已忽略")
     return text
+
+
+# 生成器产出的 LaTeX 依赖模板提供的定义。缺了只会变成 xelatex 里一句带行号的
+# "Undefined control sequence" / "Environment ... undefined"，指不出该补什么。
+# 每条：(正文/注入块里出现的标记, 模板里必须出现的字样, 缺了会怎样, 怎么补)。
+# 标记为 None 表示"总是需要"（封面由 Python 生成，无条件用到）。
+_TEMPLATE_DEPS = (
+    (None, "ctex", "中文排版与封面字号 \\zihao",
+     r"用 ctexart 文档类：\documentclass{ctexart}"),
+    (None, "xcolor", "封面底色 \\pagecolor / 收尾的 \\nopagecolor",
+     r"\usepackage{color,xcolor}"),
+    (r"\begin{lstlisting}", "listings", "代码块",
+     r"\usepackage{listings} 与 \lstset{...}"),
+    (r"\begin{tipbox}", "tcolorbox", "要点框 ::tip / 引述标记 > 💡",
+     r"\usepackage[most]{tcolorbox} 与 \newtcolorbox{tipbox}..."),
+    (r"\begin{warnbox}", "tcolorbox", "告示框 > [!WARNING] / ::warn",
+     r"\usepackage[most]{tcolorbox} 与 \newtcolorbox{warnbox}..."),
+    (r"\begin{keybox}", "tcolorbox", "要点框 ::key / > [!IMPORTANT]",
+     r"\usepackage[most]{tcolorbox} 与 \newtcolorbox{keybox}..."),
+    (r"\begin{notebox}", "tcolorbox", "告示框 > [!NOTE]",
+     r"\usepackage[most]{tcolorbox} 与 \newtcolorbox{notebox}..."),
+    (r"\begin{cautionbox}", "tcolorbox", "告示框 > [!CAUTION] / 引述标记 > ❗",
+     r"\usepackage[most]{tcolorbox} 与 \newtcolorbox{cautionbox}..."),
+    (r"\begin{mdpdfquote}", "tcolorbox", "普通引用 > 文字",
+     r"\usepackage[most]{tcolorbox} 与 \newtcolorbox{mdpdfquote}..."),
+    (r"\sout{", "ulem", "删除线 ~~…~~", r"\usepackage[normalem]{ulem}"),
+    (r"\SI{", "siunitx", "物理单位 \\SI", r"\usepackage{siunitx}"),
+    (r"\ce{", "mhchem", "化学式 \\ce", r"\usepackage[version=4]{mhchem}"),
+)
+
+
+def _template_missing_deps(preamble: str, body: str) -> list[str]:
+    """返回"正文用到了、但模板没提供定义"的说明列表（空 = 没问题）。
+
+    纯文本匹配，不解析 LaTeX：检查的都是生成器固定输出的字样
+    （如 \\begin{lstlisting}），模板提供方必须写出对应宏包名，误判概率极低。
+    """
+    problems: list[str] = []
+    for marker, needs, what, fix in _TEMPLATE_DEPS:
+        if marker is not None and marker not in body:
+            continue  # 这篇 md 没用到，不要求模板提供
+        if needs not in preamble:
+            where = "正文用到" if marker is not None else "每次转换都要"
+            problems.append(f"{where}{what}，但模板里没有 {needs} → 请加 {fix}")
+    return problems
 
 
 # ---------------------------------------------------------------------------
@@ -1066,7 +1167,7 @@ def build_tex(meta: dict, body_md: str, opts: argparse.Namespace, ctx) -> str:
     else:
         toc = []
 
-    template = load_template(getattr(opts, "template", None))
+    template = load_template(getattr(opts, "template", None), notes=ctx.warnings)
     # 占位符缺失不会让编译失败，后果都是"静默"的（符号空白 / 页眉不显示），
     # 所以必须显式提示，否则用户只会以为"排版本来就这样"。
     if PLACEHOLDER_SYMBOLS not in template:
@@ -1085,16 +1186,32 @@ def build_tex(meta: dict, body_md: str, opts: argparse.Namespace, ctx) -> str:
         r"\renewcommand{\theequation}{\arabic{equation}}"
         if no_numbers else ""
     )
-    # 封面颜色 / 编号深度 / 目录深度 / PDF 元数据 由生成器注入
-    preamble = preamble.replace(
-        "\\begin{document}",
-        f"\\mdcovercolor{{{cover_color}}}\n"
-        f"\\setcounter{{secnumdepth}}{{{secnum}}}\n"
-        f"\\setcounter{{tocdepth}}{{{opts.toc_depth}}}\n"
-        f"{counter_reset}\n"
-        f"\\hypersetup{{pdftitle={{{tex_escape(title)}}}, pdfauthor={{{tex_escape(author)}}}}}\n\n"
-        "\\begin{document}",
-    )
+    # 生成器产出的正文依赖模板提供的定义（listings / tcolorbox / ulem / …）。
+    # 缺了只会变成 xelatex 里一句带行号的 "Undefined control sequence"，
+    # 完全指不出该补什么，所以在写 .tex 之前先查一遍，一次性把缺项说清。
+    missing = _template_missing_deps(preamble, "\n".join(body))
+    if missing:
+        raise ValueError(
+            "模板缺少 md-to-pdf 产出所需的定义，编译必然失败：\n"
+            + "\n".join(f"  - {m}" for m in missing)
+            + "\n\n--template 用的模板不是「任意 LaTeX 导言区都能套」：它必须自带本工具"
+            "\n产出的 LaTeX 所需定义。最省事的做法是复制 templates\\default.tex 再改样式，"
+            "\n或直接用内置模板：--template academic")
+    # 封面颜色 / 编号深度 / 目录深度 / PDF 元数据 由生成器注入。
+    # 注入块必须**自给自足**：模板未必定义 \mdcovercolor、未必加载 hyperref。
+    # \providecommand 在模板已定义时是 no-op（默认模板正是如此），
+    # \ifdefined 守卫让没加载 hyperref 的模板也能编过。
+    inject = "\n".join([
+        r"\providecommand{\mdcovercolor}[1]{\definecolor{coverbg}{HTML}{#1}}",
+        f"\\mdcovercolor{{{cover_color}}}",
+        f"\\setcounter{{secnumdepth}}{{{secnum}}}",
+        f"\\setcounter{{tocdepth}}{{{opts.toc_depth}}}",
+        counter_reset,
+        r"\ifdefined\hypersetup"
+        f"\\hypersetup{{pdftitle={{{tex_escape(title)}}}, pdfauthor={{{tex_escape(author)}}}}}"
+        r"\fi",
+    ])
+    preamble = preamble.replace("\\begin{document}", inject + "\n\n\\begin{document}")
 
     # 目录后、正文前注入 section 计数预置（正文无 # 一级标题时，令首个 ## = 1.1）
     toc_s = "\n\n".join(toc)
@@ -1335,9 +1452,10 @@ def main(argv: list[str] | None = None) -> int:
     ap.add_argument("--toc-depth", type=int, choices=[1, 2, 3, 4], default=3,
                     help="目录深度 1–4（默认 3 = 含三级标题；2 = 只到二级）")
     ap.add_argument("--keep-aux", action="store_true", help="保留编译中间文件（.aux/.log 等）")
-    ap.add_argument("--template", default=None, metavar="模板.tex",
-                    help="排版模板（LaTeX 导言区）；缺省用内置默认模板 templates/default.tex。"
-                         "模板须含 __PAGE_HEADER__ / __SYMBOL_FALLBACKS__ 占位符与 \\begin{document}")
+    ap.add_argument("--template", default=None, metavar="模板",
+                    help="排版模板：内置名（default / academic）或 .tex 文件路径；缺省用 default。"
+                         "模板须自带生成器所需定义（listings/tcolorbox/符号回退表…）"
+                         "并含 __PAGE_HEADER__ / __SYMBOL_FALLBACKS__ 占位符")
     ap.add_argument("--open", action="store_true", help="生成后打开 PDF")
     ap.add_argument("--gui", action="store_true",
                     help="启动图形界面（拖入 .md 文件即可转换）")
