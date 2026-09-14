@@ -1,22 +1,24 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
-"""measure_coverage.py — 符号覆盖实测工具（改符号相关配置时用）。
+"""measure_coverage.py — 实测符号覆盖率，改符号相关配置时用。
 
-回答两个问题，避免靠猜：
-  1. **哪些码位该交给中文字体**（导言区的 xeCJK 字符类声明）？
-     答案 = 「SimSun 与 FangSong 都有字形」且「西文主字体 Latin Modern 没有」。
-     前者用 fontTools 读系统字体得到，后者靠实测（不带字符类声明编译一遍，
-     日志里的 Missing character 就是 LM 没有的）。**每段必须连续**——段内一旦夹着
-     LM 本来就能显示的字符，声明过去反而会把它弄坏，所以脚本只输出连续段。
-  2. **哪些符号仍然画不出来、需要进 SYMBOL_FALLBACKS？**
-     判定：在字符类区间内 → 看中文字体有没有字形；在区间外 → 看 LM 有没有字形。
-     脚本会顺手检查当前回退表：哪些是多余的（本来就能显示）、哪些仍是 broken。
+回答两个问题，不用靠猜：
+  1. 哪些码位该交给中文字体（导言区的 xeCJK 字符类声明）？
+     条件是 SimSun 与 FangSong 都有字形，而西文主字体 Latin Modern 没有。
+     前者用 fontTools 读系统字体得到；后者实测，不带字符类声明编译一遍，
+     .log 里的 Missing character 就是 LM 缺的码位。补进去的码位必须成连续段：
+     段内夹进一个 LM 本来就能显示的字符，声明过去反而会把它弄坏，所以脚本
+     只输出连续段。
+  2. 哪些符号仍然画不出来、该进 SYMBOL_FALLBACKS？
+     判定方式是码位落在字符类区间内就查中文字体有没有字形，落在区间外就查 LM
+     有没有字形。脚本顺手体检当前回退表，列出多余的（本来就能显示）和仍然
+     画不出来的。
 
 跑法（需要 xelatex）：
     python measure_coverage.py            # 打印报告 + 可直接粘贴的声明片段
-    python measure_coverage.py --blocks   # 额外逐区块列出"现在还是空白"的字符
+    python measure_coverage.py --blocks   # 额外逐区块列出「现在还是空白」的字符
 
-注意：脚本里的 DECLARED 必须与导言区那段声明的码位保持一致（改了导言区就改这里）。
+注意：脚本里的 DECLARED 必须与导言区那段声明的码位一致，改了导言区就改这里。
 """
 from __future__ import annotations
 
@@ -31,8 +33,8 @@ from fontTools.ttLib import TTFont, TTCollection
 
 HERE = Path(__file__).resolve().parent
 WORK = HERE / "_symtest"
-sys.path.insert(0, str(HERE))
-import md_to_pdf  # noqa: E402
+sys.path.insert(0, str(HERE.parent))  # 脚本住在 tests/ 下，模块在上一层
+import md_latex_pdf  # noqa: E402
 
 # 扫描的区块（中文技术文档里可能出现的符号区）
 BLOCKS = [(0x2000, 0x206F, "常用标点"), (0x20A0, 0x20BF, "货币"),
@@ -75,7 +77,7 @@ def font_coverage(path: str) -> set[int]:
 
 
 def measured_lm_missing(chars: list[str]) -> set[int]:
-    """不带字符类声明编译一遍：日志里的 Missing character = Latin Modern 没有的码位。"""
+    """不带字符类声明编译一遍：.log 里的 Missing character 就是 Latin Modern 缺的码位。"""
     WORK.mkdir(exist_ok=True)
     tex = WORK / "lm_probe.tex"
     tex.write_text(
@@ -83,7 +85,7 @@ def measured_lm_missing(chars: list[str]) -> set[int]:
         "\\pagestyle{empty}\n\\begin{document}\n"
         + "\n".join(" ".join(chars[i:i + 20]) + r" \par" for i in range(0, len(chars), 20))
         + "\n\\end{document}\n", encoding="utf-8")
-    subprocess.run([str(md_to_pdf.find_xelatex()), "-interaction=nonstopmode", "-synctex=0",
+    subprocess.run([str(md_latex_pdf.find_xelatex()), "-interaction=nonstopmode", "-synctex=0",
                     "-output-directory=" + WORK.as_posix(), tex.as_posix()],
                    cwd=WORK, capture_output=True)
     log = (WORK / "lm_probe.log").read_text(encoding="utf-8", errors="replace")
@@ -129,11 +131,11 @@ def main() -> int:
     print(f"\n== 两条路都救不了、仍然是空白的码位：{len(still)} 个 ==")
 
     # ---- 3. 现有回退表体检 ----
-    redundant = [ch for ch in md_to_pdf.SYMBOL_FALLBACKS if not broken(ord(ch))]
-    print(f"\n== 当前回退表 {len(md_to_pdf.SYMBOL_FALLBACKS)} 条 ==")
+    redundant = [ch for ch in md_latex_pdf.SYMBOL_FALLBACKS if not broken(ord(ch))]
+    print(f"\n== 当前回退表 {len(md_latex_pdf.SYMBOL_FALLBACKS)} 条 ==")
     print("  多余（本来就能显示，可删；¹²³ 是为角标统一而有意保留）：",
           " ".join(f"{c}(U+{ord(c):04X})" for c in redundant) or "无")
-    covered = {c for c in still if not any(ord(ch) == c for ch in md_to_pdf.SYMBOL_FALLBACKS)}
+    covered = {c for c in still if not any(ord(ch) == c for ch in md_latex_pdf.SYMBOL_FALLBACKS)}
     print(f"  仍是空白且表里没收的码位：{len(covered)} 个（多数没有 LaTeX 等价写法）")
 
     if args.blocks:

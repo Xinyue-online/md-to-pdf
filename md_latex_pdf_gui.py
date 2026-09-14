@@ -1,18 +1,18 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
-r"""md-to-pdf 图形界面——把 .md 文件拖进窗口即可转换为 LaTeX 源码 + PDF。
+r"""md-latex-pdf 的图形界面：把 .md 文件拖进窗口，转出 LaTeX 源码和 PDF。
 
-- 窗口标题「md-to-pdf 转换器」，把 Markdown（.md）文件拖进来（或点「选择文件」）。
-- 转换逻辑复用 md_to_pdf.py 的 convert_file（LaTeX 表格 / 代码高亮 / 数学公式等特性全部保留）。
-- 产物 <同名>.tex 与 <同名>.pdf 写入当前 md 所在目录；同名文件已存在时弹出覆盖确认。
-- 「排版模板」下拉选内置模板（default / academic），或直接填 / 浏览一个 .tex 路径。
-- 出错时在窗口内显示错误摘要，不打印后台堆栈。
+- 窗口标题「md-latex-pdf 转换器」。拖入 Markdown（.md）文件，也可以点「选择文件」。
+- 转换直接调 md_latex_pdf.py 的 convert_file，LaTeX 表格、代码高亮、数学公式这些都在。
+- 产物 <同名>.tex 和 <同名>.pdf 落在 md 同一目录；同名文件已存在时先弹窗问要不要覆盖。
+- 「排版模板」下拉里是内置模板（default / academic），也可以直接填或浏览一个 .tex 路径。
+- 出错只在窗口里显示一句摘要，后台堆栈不往外打。
 
-界面风格与 video-to-md（D:/workspace/_skill_tool/video-to-md）保持一致：深色顶栏 + 卡片式布局 + 彩色记录区。
+窗口风格：深色顶栏、卡片布局、彩色记录区。
 
 依赖：
-    python -m pip install tkinterdnd2        # 原生拖拽（缺失时自动退回「选择文件」按钮）
-    及本机 xelatex（运行 install_tex.ps1 一键安装 TinyTeX）。
+    python -m pip install tkinterdnd2        # 原生拖拽；没装就退回「选择文件」按钮
+    本机还要有 xelatex（运行 install_tex.ps1 可装 TinyTeX）。
 """
 import os
 import queue
@@ -21,30 +21,30 @@ import sys
 import threading
 from pathlib import Path
 
-# 确保能导入同目录的 md-to-pdf 模块
+# 脚本所在目录不一定在 sys.path 里，先补上，才 import 得到同目录的 md_latex_pdf
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
 import tkinter as tk
 from tkinter import filedialog, messagebox, ttk
 
-import md_to_pdf
+import md_latex_pdf
 
-# 目录层级下拉：选项文字 → (是否生成目录, tocdepth)。「无目录」= 关闭目录页。
+# 目录层级下拉的文字 → (是否生成目录, tocdepth)。「无目录」表示不生成目录页。
 TOC_CHOICES = ("无目录", "1 级", "2 级", "3 级", "4 级")
 TOC_DEFAULT = "3 级"
 
-# 排版模板下拉：「（默认）」对应 md_to_pdf 的 default.tex；其余是内置模板名。
-# 下拉框是可编辑的，也可以直接粘一个 .tex 路径进去。
+# 排版模板下拉里「（默认）」指 md_latex_pdf 的 default.tex，其余选项是内置模板名。
+# 下拉框可编辑，所以往里粘一个 .tex 路径也认。
 TEMPLATE_DEFAULT_LABEL = "（默认）"
 
 
 def template_options() -> list[str]:
-    """下拉候选：默认项 + templates 目录里的内置模板名（default / academic …）。"""
-    return [TEMPLATE_DEFAULT_LABEL] + sorted(md_to_pdf.builtin_templates())
+    """下拉候选：默认项，加上 templates 目录里的内置模板名（default / academic 等）。"""
+    return [TEMPLATE_DEFAULT_LABEL] + sorted(md_latex_pdf.builtin_templates())
 
 
 def template_value(choice: str) -> str | None:
-    """下拉/输入框的值 → convert_file 的 template 参数（None = 默认模板）。"""
+    """把下拉框（或输入框）里的文字换成 convert_file 的 template 参数；None 表示用默认模板。"""
     v = (choice or "").strip()
     if not v or v == TEMPLATE_DEFAULT_LABEL:
         return None
@@ -52,10 +52,10 @@ def template_value(choice: str) -> str | None:
 
 
 def toc_options(choice: str) -> tuple[bool, int]:
-    """把「N 级 / 无目录」下拉文字转成 convert_file 需要的 (toc, toc_depth)。
+    """把「N 级 / 无目录」这段下拉文字转成 convert_file 要的 (toc, toc_depth)。
 
-    下拉是只读的，取值只可能来自 TOC_CHOICES；万一拿到认不出的文字，
-    按「无目录」处理（宁可不出目录页，也不要擅自加一个用户没选的目录）。
+    下拉是只读的，值只会来自 TOC_CHOICES。真拿到认不出的文字就按「无目录」算：
+    少一个目录页能接受，凭空多出一个用户没选的目录不行。
     """
     m = re.match(r"\s*([1-4])\s*级", choice or "")
     if not m:
@@ -63,7 +63,7 @@ def toc_options(choice: str) -> tuple[bool, int]:
     return True, int(m.group(1))
 
 
-# tkinterdnd2 提供真正的 OS 级拖拽；未安装时优雅退回「选择文件」按钮
+# tkinterdnd2 提供真正的 OS 级拖拽；没装就退回「选择文件」按钮。
 try:
     from tkinterdnd2 import TkinterDnD, DND_FILES
     _HAS_DND = True
@@ -71,7 +71,7 @@ except Exception:  # noqa: BLE001
     _HAS_DND = False
 
 _FONT = "Microsoft YaHei UI"
-# ---- 配色（与 video-to-md 一致）----
+# ---- 配色 ----
 _BG = "#eef1f7"
 _CARD = "#ffffff"
 _BORDER = "#d9dfec"
@@ -87,13 +87,12 @@ _ERR = "#d33a3a"
 
 
 def _short_error(exc: Exception) -> str:
-    """把异常压成一句短的错误摘要（不抛堆栈）。
+    """把异常压成一句短摘要，堆栈不外露。
 
-    xelatex 编译失败的异常消息 = "xelatex 编译失败（exit N）：\n" + log 尾部，
-    而 log 尾部常以 "Output written on ...(N pages)."（成功行）收尾——直接取
-    最后一行会掩盖真正的报错（如 "Undefined control sequence"）。故优先挑
-    file-line-error 行（...tex:NNNN: ...，如 -file-line-error 的输出）或
-    LaTeX 的 "! ..." 错误行；都找不到时才退回最后一行。
+    xelatex 编译失败时，异常消息是 "xelatex 编译失败（exit N）：\n" 接上 log 尾部，
+    而 log 尾部常常是 "Output written on ...(N pages)." 这种成功行。直接取最后一行
+    会把真正的报错（比如 "Undefined control sequence"）盖掉。所以先找 file-line-error
+    行（...tex:NNNN: ... 那种），再找 LaTeX 的 "! ..." 行，都没有才退回最后一行。
     """
     text = str(exc).replace("\r\n", "\n").strip()
     lines = [l.strip() for l in text.splitlines() if l.strip()]
@@ -112,7 +111,7 @@ def _short_error(exc: Exception) -> str:
 
 
 def _card(parent):
-    """带细边框的白色卡片：返回 (外框, 内芯)。"""
+    """白底卡片，外面那圈细边框由外层 Frame 画。返回 (外框, 内芯)。"""
     outer = tk.Frame(parent, bg=_BORDER, bd=0, highlightthickness=1,
                      highlightbackground=_BORDER, highlightcolor=_BORDER)
     inner = tk.Frame(outer, bg=_CARD)
@@ -121,11 +120,11 @@ def _card(parent):
 
 
 class MdToPdfApp:
-    """单窗口 GUI：拖入 .md → 转换成 <同名>.tex + <同名>.pdf。"""
+    """单窗口 GUI：拖入 .md，转出 <同名>.tex 和 <同名>.pdf。"""
 
     def __init__(self):
-        # tkinterdnd2 导入成功不代表 tkdnd(Tcl 扩展) 一定能加载（如打包 exe 缺数据文件），
-        # 因此实例化时再试一次；失败则退回纯 tk，保证窗口始终能开。
+        # import 成功不代表 tkdnd（Tcl 扩展）加载得起来，打包成 exe 缺数据文件就会翻车。
+        # 所以实例化时再试一次，不行就退回纯 tk，窗口总归要能开。
         self._dnd = False
         if _HAS_DND:
             try:
@@ -135,7 +134,7 @@ class MdToPdfApp:
                 self.root = tk.Tk()
         else:
             self.root = tk.Tk()
-        self.root.title("md-to-pdf 转换器")
+        self.root.title("md-latex-pdf 转换器")
         self.root.geometry("640x690")
         self.root.minsize(580, 610)
         self.root.configure(bg=_BG)
@@ -143,7 +142,7 @@ class MdToPdfApp:
 
         self.last_pdf: Path | None = None
         self._busy = False
-        # 工作线程不直接碰 Tk；通过队列把结果送回主线程，由 _poll 在主循环里消费。
+        # Tk 控件不是线程安全的，工作线程只往队列里塞结果，由主线程的 _poll 消费。
         self._queue: "queue.Queue[tuple]" = queue.Queue()
 
         self._build_ui()
@@ -155,7 +154,7 @@ class MdToPdfApp:
         # 顶栏
         head = tk.Frame(self.root, bg=_HEAD)
         head.pack(fill="x")
-        tk.Label(head, text="md-to-pdf 转换器", font=(_FONT, 16, "bold"),
+        tk.Label(head, text="md-latex-pdf 转换器", font=(_FONT, 16, "bold"),
                  bg=_HEAD, fg="#ffffff").pack(pady=(14, 0), padx=18, anchor="w")
         tk.Label(head, text="把 Markdown 拖进来，就在文件所在目录生成 LaTeX 源码 + A4 PDF",
                  font=(_FONT, 9), bg=_HEAD, fg=_HEAD_SUB).pack(pady=(2, 14), padx=18, anchor="w")
@@ -168,10 +167,10 @@ class MdToPdfApp:
         drop_card.pack(fill="x")
         self.drop_zone.configure(height=112)
         self.drop_zone.pack_propagate(False)
-        tk.Label(self.drop_zone, text="请拖入 md 文件", font=(_FONT, 14, "bold"),
+        tk.Label(self.drop_zone, text="把 Markdown 文件拖到这里", font=(_FONT, 14, "bold"),
                  bg=_CARD, fg="#33415f").pack(pady=(24, 4))
         tk.Label(self.drop_zone,
-                 text="支持多文件 · 输出 <同名>.tex + <同名>.pdf 到 md 所在目录 · LaTeX 级排版",
+                 text="支持多文件 · 产物 <同名>.tex + <同名>.pdf 写到文件所在目录 · 排版走 LaTeX",
                  font=(_FONT, 9), bg=_CARD, fg=_MUTED).pack()
         self.drop_label = self.drop_zone.winfo_children()[0]
 
@@ -186,24 +185,24 @@ class MdToPdfApp:
         tk.Label(opt_inner, text="（# 记 1 级、## 记 2 级…；选「无目录」则不生成目录页）",
                  font=(_FONT, 8), bg=_CARD, fg=_MUTED).pack(side="left", padx=10)
 
-        # 2b) 选项行：排版模板（「（默认）」= templates\default.tex）
+        # 2b) 选项行：排版模板（「（默认）」就是 templates\default.tex）
         tpl_card, tpl_inner = _card(body)
         tpl_card.pack(fill="x", pady=(8, 0))
         tpl_row = tk.Frame(tpl_inner, bg=_CARD)
         tpl_row.pack(fill="x")
         tk.Label(tpl_row, text="排版模板", font=(_FONT, 9, "bold"),
                  bg=_CARD, fg="#33415f").pack(side="left", padx=(14, 8), pady=9)
-        # 先 pack 右侧按钮，再 pack 可拉伸的下拉框：Tk 按 pack 顺序分配空间，
-        # 若下拉框先 pack 且 expand=True，会把剩余空间吃光导致按钮被挤出可视区。
+        # 右侧按钮先 pack，可拉伸的下拉框后 pack。Tk 按 pack 顺序分空间，
+        # 下拉框若先 pack 又带 expand=True，会把剩余宽度吃光，按钮就被挤出可视区。
         self._add_btn(tpl_row, "默认", self._reset_template, padx=(0, 14), side="right")
         self._add_btn(tpl_row, "浏览…", self._choose_template, padx=(0, 6), side="right")
         self.template_var = tk.StringVar(value=TEMPLATE_DEFAULT_LABEL)
-        # state="normal" = 可编辑：既可从下拉选内置模板，也能直接粘 .tex 路径
+        # state="normal" 让下拉框可编辑，能直接粘 .tex 路径，不必先选内置模板
         ttk.Combobox(tpl_row, textvariable=self.template_var, values=template_options(),
                      state="normal", width=16, font=(_FONT, 9)).pack(
             side="left", fill="x", expand=True, pady=9)
         tk.Label(tpl_inner,
-                 text="内置模板：" + "、".join(sorted(md_to_pdf.builtin_templates()))
+                 text="内置模板：" + "、".join(sorted(md_latex_pdf.builtin_templates()))
                       + "（default = 紧凑讲义；academic = 学术论文版心）；也可直接填 .tex 路径",
                  font=(_FONT, 8), bg=_CARD, fg=_MUTED).pack(anchor="w", padx=14, pady=(0, 8))
 
@@ -229,7 +228,7 @@ class MdToPdfApp:
         # 4) 按钮行
         acts = tk.Frame(body, bg=_BG)
         acts.pack(fill="x", pady=(12, 2))
-        tk.Label(acts, text="需要本机 xelatex（缺失时点看 README / 运行 install_tex.ps1）",
+        tk.Label(acts, text="需要本机有 xelatex（没有就装一下：看 README，或跑 install_tex.ps1）",
                  font=(_FONT, 8), bg=_BG, fg=_MUTED).pack(side="left")
         btns = tk.Frame(acts, bg=_BG)
         btns.pack(side="right")
@@ -238,8 +237,8 @@ class MdToPdfApp:
         self._add_btn(btns, "清空记录", self._clear)
 
         if not self._dnd:
-            self._log("拖拽不可用（未加载 tkinterdnd2/tkdnd），请用「选择文件」，或运行 "
-                      "pip install tkinterdnd2 后重启。", "dim")
+            self._log("拖拽没启用（缺 tkinterdnd2，或 tkdnd 没加载起来）。可以先用「选择文件」，"
+                      "或者 pip install tkinterdnd2 之后重启。", "dim")
 
     def _add_btn(self, parent, text, cmd, primary=False, padx=(0, 0), side="left"):
         if primary:
@@ -259,6 +258,7 @@ class MdToPdfApp:
     def _register_drop(self):
         if not self._dnd:
             return
+        # 窗口和拖放区都注册：拖到窗口空白处也认
         for w in (self.root, self.drop_zone):
             try:
                 w.drop_target_register(DND_FILES)
@@ -294,54 +294,54 @@ class MdToPdfApp:
             self._handle_paths(files)
 
     def _choose_template(self):
-        """选一个 .tex 排版模板；取消则保持原值。"""
+        """挑一个 .tex 排版模板。取消对话框就保持原值。"""
         cur = template_value(self.template_var.get())
         init = Path(cur).parent if cur else None
         path = filedialog.askopenfilename(
             title="选择排版模板（.tex）",
-            initialdir=str(init) if init and init.is_dir() else str(md_to_pdf.templates_dir()),
+            initialdir=str(init) if init and init.is_dir() else str(md_latex_pdf.templates_dir()),
             filetypes=[("LaTeX 模板", "*.tex"), ("全部文件", "*.*")],
             parent=self.root)
         if path:
             self.template_var.set(path)
 
     def _reset_template(self):
-        """回到内置默认模板。"""
+        """把模板换回内置默认项。"""
         self.template_var.set(TEMPLATE_DEFAULT_LABEL)
 
     # ---- 转换调度 ----
     def _handle_paths(self, paths):
         md_paths = [p for p in paths if Path(p).suffix.lower() == ".md"]
         if not md_paths:
-            self._log("未识别到 .md 文件，已忽略。", "err")
+            self._log("没找到 .md 文件，已忽略。", "err")
             return
-        # 覆盖确认在主线程弹窗，避免工作线程操作 GUI
+        # 覆盖确认要弹窗，只能放在主线程，工作线程不碰 GUI
         jobs = []
         for p in md_paths:
             md = Path(p).resolve()
             jobs.append((md, self._resolve_out_stem(md)))
-        # 选项也在主线程读（tk 变量不跨线程碰），随 jobs 一起交给工作线程
+        # 选项读值也放主线程（tk 变量不能跨线程访问），跟 jobs 一起交给工作线程
         toc, toc_depth = toc_options(self.toc_var.get())
         template = template_value(self.template_var.get())
-        # 用与转换时同一套解析（内置名 / 路径），先查存在性再起线程
-        if template is not None and not md_to_pdf.resolve_template_path(template).is_file():
+        # 这里和转换时走同一套解析（内置名或路径），先确认模板在不在，再起线程
+        if template is not None and not md_latex_pdf.resolve_template_path(template).is_file():
             self._log(f"排版模板不存在：{template}", "err")
             return
-        opts = md_to_pdf._default_opts(toc=toc, toc_depth=toc_depth, template=template)
+        opts = md_latex_pdf._default_opts(toc=toc, toc_depth=toc_depth, template=template)
         self._busy = True
         self._log(f"开始转换 {len(jobs)} 个文件…（目录层级：{self.toc_var.get()}；"
                   f"排版模板：{Path(template).stem if template else '默认'}）", "dim")
         threading.Thread(target=self._worker, args=(jobs, opts), daemon=True).start()
 
     def _resolve_out_stem(self, md: Path) -> str:
-        """决定输出文件名。同名 .tex/.pdf 已存在时询问是否覆盖；否则加序号避免覆盖。"""
+        """定下输出文件名：同名 .tex/.pdf 已存在就先问要不要覆盖，不覆盖就换个带序号的名字。"""
         stem = md.stem
         had = [f"{stem}.tex", f"{stem}.pdf"]
         if any((md.parent / n).exists() for n in had):
             overwrite = messagebox.askyesno(
                 "覆盖确认",
-                f"「{stem}」已有同名 .tex/.pdf：\n{stem}.tex\n{stem}.pdf\n\n是否覆盖？\n"
-                "（选「否」将自动改用带序号的输出文件名，保留原文件）",
+                f"「{stem}」已有同名文件：\n{stem}.tex\n{stem}.pdf\n\n覆盖它们吗？\n"
+                "（选「否」会改用带序号的输出文件名，原文件留着）",
                 parent=self.root)
             if not overwrite:
                 i = 2
@@ -354,10 +354,10 @@ class MdToPdfApp:
         return stem
 
     def _worker(self, jobs, opts):
-        """后台线程：逐文件转换，结果经队列送回主线程（不直接碰 Tk）。"""
+        """后台线程里逐个转换，结果丢进队列交给主线程，这里不碰 Tk。"""
         for md, out_stem in jobs:
             try:
-                tex, pdf, ctx = md_to_pdf.convert_file(md, out_dir=md.parent,
+                tex, pdf, ctx = md_latex_pdf.convert_file(md, out_dir=md.parent,
                                                        out_stem=out_stem, opts=opts)
                 msg = f"✓ {md.name} -> {tex.name} + {pdf.name}"
                 if ctx.warnings:
@@ -366,12 +366,12 @@ class MdToPdfApp:
                     msg += "\n    输出目录：" + str(md.parent)
                 self._queue.put(("log", msg, "ok"))
                 self._queue.put(("last_pdf", pdf, None))
-            except Exception as e:  # noqa: BLE001  在窗口内显示摘要，不抛堆栈
+            except Exception as e:  # noqa: BLE001  异常在这里收成一句摘要，堆栈不往外抛
                 self._queue.put(("log", f"✗ {md.name} 失败：{_short_error(e)}", "err"))
         self._queue.put(("done", None, None))
 
     def _poll(self):
-        """主线程事件循环里消费队列，更新 GUI 后重新排下一次。"""
+        """在主线程的主循环里取队列，更新完 GUI 再排下一次。"""
         try:
             while True:
                 kind, payload, tag = self._queue.get_nowait()
@@ -401,32 +401,32 @@ class MdToPdfApp:
         if self.last_pdf and self.last_pdf.exists():
             os.startfile(str(self.last_pdf))  # type: ignore[attr-defined]  # startfile 需字符串路径
         else:
-            messagebox.showinfo("提示", "尚未生成 PDF，或文件已不存在。", parent=self.root)
+            messagebox.showinfo("提示", "还没生成 PDF，或者文件已经被移走了。", parent=self.root)
 
 
 def launch() -> int:
-    """启动 GUI 主循环（供脚本自身及 md_to_pdf.py --gui 调用）。"""
+    """开窗口跑主循环。脚本直接运行和 md_latex_pdf.py --gui 都走这里。"""
     app = MdToPdfApp()
     app.root.mainloop()
     return 0
 
 
 def _run_cli(argv) -> int:
-    """命令行模式：交给核心转换（md_to_pdf.main）。
+    """命令行模式：整件事交给 md_latex_pdf.main。
 
-    这是给 DSH 格式转换入口（format-convert-router）用的：`md-to-pdf.exe 讲义.md` 直接转 PDF，
-    不弹窗口。打包的 exe 是 --windowed（无控制台），sys.stdout/stderr 可能为 None，
-    print 会崩，故先兜底成安全对象；退出码仍据转换结果返回，文件照常产出。
+    `md-latex-pdf.exe 讲义.md` 一条命令直接转出 PDF，不弹窗口。
+    打包时用的是 --windowed，没有控制台，sys.stdout/stderr 可能是 None，
+    这时 print 会直接崩，所以先兜底成安全对象。退出码照旧反映转换结果，文件也照常产出。
     """
     if sys.stdout is None:
         sys.stdout = open(os.devnull, "w", encoding="utf-8", errors="replace")
     if sys.stderr is None:
         sys.stderr = open(os.devnull, "w", encoding="utf-8", errors="replace")
-    return md_to_pdf.main(argv)
+    return md_latex_pdf.main(argv)
 
 
 if __name__ == "__main__":
-    # 单文件 exe 双模式：带 .md 参数 → CLI 转换；双击/无参数 → 打开 GUI
+    # 同一个 exe 两种用法：带 .md 参数就走命令行转换，双击或没参数就开窗口
     if len(sys.argv) > 1:
         sys.exit(_run_cli(sys.argv[1:]))
     sys.exit(launch())

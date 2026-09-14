@@ -1,12 +1,17 @@
-# PyInstaller 构建中间产物（可由 build_exe.ps1 完全重新生成）
+# PyInstaller 构建产物（build_exe.ps1 重新生成）
 /build/
+/dist/
 
-# 自测脚本的临时产物（test_symbol_fallback.py 每次运行重建，可随时删）
-/_symtest/
+# 测试脚本的临时产物（每次运行重建，可随时删）
+/tests/_symtest/
 
 # Python 缓存
 __pycache__/
 *.pyc
+
+# 转换产物：图片副本与默认输出目录
+/images/
+/out/
 
 # LaTeX 编译中间产物（保留 .tex / .pdf 成品，其余不入库）
 *.aux

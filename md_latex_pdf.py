@@ -1,25 +1,25 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
-"""md-to-pdf — Markdown → LaTeX → PDF（xelatex 编译）。
+"""md-latex-pdf — Markdown → LaTeX → PDF（用 xelatex 编译）。
 
-LaTeX 风格（衬线字体、自动章节编号、booktabs 表格、定理式要点框）、紧凑排版、
-封面纯色背景 + 黑字。支持的 Markdown 语法：
+排版走 LaTeX：衬线字体、章节自动编号、booktabs 表格、定理式彩色框，整体紧凑，
+封面是纯色背景配黑字。支持的 Markdown 语法：
   标题 #~######（自动编号）、段落、粗体/斜体/删除线、行内代码、围栏代码块（语法高亮）、
   表格（对齐、长表自动转 longtable）、有序/无序/嵌套/任务列表、引用、分隔线、
-  链接/自动链接、图片（本地图片自动复制进输出目录）、脚注、数学公式（LaTeX 原生渲染）、
-  要点框 ::tip / ::warn / ::key、GitHub 风格告示框 >[!NOTE]/[!TIP]/[!IMPORTANT]/
-  [!WARNING]/[!CAUTION]、引述标记 > ❗/⚠/💡（同一套彩色框）、强制分页 ::page。
+  链接/自动链接、图片（本地图片自动复制进输出目录）、脚注、数学公式（LaTeX 渲染，
+  不需要 KaTeX）、GitHub 风格告示框 >[!NOTE]/[!TIP]/[!IMPORTANT]/[!WARNING]/[!CAUTION]、
+  引述标记 > ❗/⚠/💡（与告示框共用同一套彩色框）、强制分页 ::page。
 
-用法:
-    md-to-pdf input.md [输出目录] [--header 页眉文字] [--cover-color #RRGGBB]
+用法：
+    md-latex-pdf input.md [输出目录] [--header 页眉文字] [--cover-color #RRGGBB]
                     [--no-numbers] [--no-toc] [--toc-depth 3] [--keep-aux] [--open]
                     [--template 我的模板.tex]
-    md-to-pdf            # 不带参数启动图形界面（拖入 .md 即可转换）
+    md-latex-pdf            # 不带参数启动图形界面（拖入 .md 即可转换）
 
-排版规则放在可替换的模板文件里：缺省用 templates/default.tex（= 本工具原有风格），
-用 --template 指向别的 .tex 即可整体换一套导言区/排版规则。
-产物: <同名>.tex（可编辑的 LaTeX 中间产物）与 <同名>.pdf。
-依赖: 本机安装 xelatex（TinyTeX/MiKTeX/TeX Live 均可，见 install_tex.ps1）。
+排版规则放在可替换的模板文件里：缺省用 templates/default.tex，
+用 --template 指向别的 .tex 就能整套换掉导言区与排版规则。
+产物：<同名>.tex（可编辑的 LaTeX 中间产物）与 <同名>.pdf。
+依赖：本机装上 xelatex（TinyTeX/MiKTeX/TeX Live 都行，见 install_tex.ps1）。
 """
 from __future__ import annotations
 
@@ -33,28 +33,28 @@ import sys
 import tempfile
 from pathlib import Path
 
-VERSION = "1.0.6"
+VERSION = "1.0.0"
 
 # ---------------------------------------------------------------------------
 # SYMBOL_FALLBACKS —— 正文符号回退表（CJK 字体缺字形 → 等价的 LaTeX 数学命令）
 # ---------------------------------------------------------------------------
-# 背景：ctexart 的中文字体（SimSun/FangSong）只覆盖一部分数学符号。实测
+# ctexart 的中文字体（SimSun/FangSong）只覆盖一部分数学符号。实测
 # "0370-03FF / 2070-209F / 2190-21FF / 2200-22FF / 2460-24FF 五个区间共 705 个
-# 已分配码位，SimSun 缺 562 个"——∈ ∪ ∩ ∧ ∨ → ← ↑ ↓ ∑ ∏ ∫ √ ∞ ≠ ≤ ≥ 这些有字形，
+# 已分配码位，SimSun 缺 562 个"：∈ ∪ ∩ ∧ ∨ → ← ↑ ↓ ∑ ∏ ∫ √ ∞ ≠ ≤ ≥ 这些有字形，
 # 而 ∀ ∃ ∅ ⊂ ⊆ ⇒ ⇐ ⇔ ↦ ∂ ∇ ⊗ 以及上标 ⁴⁻ⁿ、下标 ₀₂ 等直接写进正文会渲染成**空白**
-# （xelatex 只在 .log 里报 "Missing character" 警告，PDF 上就是缺一块）。
-# 处理：把这些**实际缺字**的常用符号声明为活动字符，展开成等价的数学命令，由数学
-# 字体（Latin Modern Math）渲染；\ensuremath 幂等，所以数学模式内写 $∀$ 同样正确。
-# 不在表里的字符（含 CJK 字体本来就有字形的 σ μ ∈ ∑ 等）保持原样，行为不变。
+# （xelatex 只在 .log 里报一条 "Missing character"，PDF 上就是缺一块）。
+# 处理办法是把这些缺字形的常用符号声明为活动字符，展开成等价的数学命令，交给数学
+# 字体（Latin Modern Math）排；\ensuremath 幂等，所以在数学模式里写 $∀$ 同样正确。
+# 表外的字符（包括 CJK 字体本来就有字形的 σ μ ∈ ∑ 等）保持原样，行为不变。
 #
-# 收录标准：**实测确实画不出来**的符号——落在字符类区间里但中文字体没字形，
-# 或落在区间外而西文主字体没字形（align_table.py 会按这两条重算并列出多余条目）。
-# 所以这里不放 ′ ″ ■ □ ▲ ● Ⅰ Ⅱ Ⅲ 这类"交给中文字体就行"的符号（它们在
-# 导言区的 xeCJK 字符类声明里），也不放 ≮ ≯ ℧ 这类西文字体本来就有的符号。
-# 例外：¹ ² ³ 单看能显示，但和 ⁴⁻ⁿ 属同一串角标，混用两种字体会大小不一，故一并收进来。
+# 收录标准只有一条：实测确实画不出来。要么落在上述区间里但中文字体没字形，要么
+# 落在区间外而西文主字体没字形（tests/measure_coverage.py 按这两条重算并列出多余条目）。
+# 所以这里不放 ′ ″ ■ □ ▲ ● Ⅰ Ⅱ Ⅲ 这类"交给中文字体就行"的符号（它们在导言区
+# 的 xeCJK 字符类声明里），也不放 ≮ ≯ ℧ 这类西文字体本来就有的符号。
+# 例外：¹ ² ³ 单看能显示，可它们和 ⁴⁻ⁿ 是同一串角标，混用两种字体会大小不一，一并收进来。
 #
-# 扩展方式：在下面加一行（键 = 正文字符，值 = 等价的 LaTeX 代码），改完必须跑
-# test_symbol_fallback.py —— 它会逐符号编译，能抓出 "命令不存在" 这类错误。
+# 扩展：在下面加一行（键 = 正文字符，值 = 等价的 LaTeX 代码），改完跑一遍
+# test_symbol_fallback.py。它会逐符号编译，能抓出 "命令不存在" 这类错误。
 SYMBOL_FALLBACKS: dict[str, str] = {
     # 逻辑与集合
     "∀": r"\ensuremath{\forall}",
@@ -178,17 +178,17 @@ SYMBOL_FALLBACKS: dict[str, str] = {
 # ---------------------------------------------------------------------------
 # EMOJI_ICONS —— 表情/警示符号回退表（❗ ⚠ 💡 → Segoe UI Symbol 的字形）
 # ---------------------------------------------------------------------------
-# 与 SYMBOL_FALLBACKS 的差别：它们没有 LaTeX 数学等价写法（不是符号，是图形），
-# 所以不是"映射成数学命令"，而是"切到一个这些字形都齐的西文字体"再排原字符。
-# 背景同样是**空白**：中文字体（SimSun/FangSong）与西文主字体 Latin Modern 都
-# 没有 U+2757/U+26A0/U+1F4A1 的字形，直接写进正文 xelatex 只报 Missing character，
-# PDF 上就是缺一块。Windows 自带的 Segoe UI Symbol 三个字形都有（含星平面 U+1F4A1）。
+# 和 SYMBOL_FALLBACKS 不同：这三个是图形，没有等价的 LaTeX 数学写法，所以没法映射成
+# 数学命令，只能切到一个这三个字形都齐的西文字体，再排原字符。
+# 后果一样是空白：中文字体（SimSun/FangSong）和西文主字体 Latin Modern 都没有
+# U+2757/U+26A0/U+1F4A1 的字形，直接写进正文 xelatex 只报一条 Missing character，
+# PDF 上缺一块。Windows 自带的 Segoe UI Symbol 三个字形都有（含星平面 U+1F4A1）。
 #
 #   ❗ U+2757 → \mdpdfIconExcl    ⚠ U+26A0 → \mdpdfIconWarn    💡 U+1F4A1 → \mdpdfIconBulb
 #
-# 与 SYMBOL_FALLBACKS 共用同一套"活动字符"机制（\mdpdfSymbol），所以正文、标题、
-# 表格单元格、告示框、页眉、甚至行内代码里写法都一样。非 Windows 机器上没有这个
-# 字体时：走 \IfFontExistsTF 的空分支，三个字符被丢弃，既不留空白格也不报错。
+# 活动字符机制与 SYMBOL_FALLBACKS 共用（\mdpdfSymbol），正文、标题、表格单元格、
+# 告示框、页眉、行内代码里的写法一致。机器上没有这个字体时走 \IfFontExistsTF 的空
+# 分支，三个字符被丢弃，既不留空白格也不报错。
 # U+FE0F（变体选择符，❗️/⚠️ 的第二个码位）是零宽控制符，在 convert_file 里直接删掉。
 EMOJI_ICONS: dict[str, str] = {
     "❗": r"\mdpdfIconExcl",
@@ -197,12 +197,12 @@ EMOJI_ICONS: dict[str, str] = {
 }
 _EMOJI_FONT = "Segoe UI Symbol"
 
-# 注意宏体里的 ❗ ⚠ 💡 是在**设置活动字符之前**被读进宏定义的（那时它们还是普通
-# 字符，catcode 12），所以展开时不会再次触发活动字符而无限递归。
+# 宏体里的 ❗ ⚠ 💡 在设置活动字符之前就被读进宏定义了（那时它们还是普通字符，
+# catcode 12），所以展开时不会再次触发活动字符，不会无限递归。
 _EMOJI_PREAMBLE = r"""
 %----- 表情/警示符号 ❗ ⚠ 💡（切到 Windows 自带的 Segoe UI Symbol）-----
 % 三个图标宏都必须在这里（活动字符声明之前）定义完；换字体只在图标宏内部生效，
-% 不影响正文其它字符。\mbox 是为了数学模式里也安全（$❗$ 与正文 ❗ 都能排）。
+% 正文其它字符不受影响。\mbox 是为了数学模式里也安全（$❗$ 与正文 ❗ 都能排）。
 \IfFontExistsTF{__EMOJI_FONT__}{%
   \newfontfamily\mdpdfsymfont{__EMOJI_FONT__}%
   \newcommand\mdpdfIconExcl{\mbox{{\mdpdfsymfont ❗}}}%
@@ -215,14 +215,14 @@ _EMOJI_PREAMBLE = r"""
 }
 """
 
-# 下面的辅助宏把字符设为活动字符（active）并指向目标 LaTeX 代码：\lccode + \lowercase
+# 下面这个辅助宏把字符设成活动字符（active），并指向目标 LaTeX 代码：\lccode + \lowercase
 # 是 LaTeX 里给任意 Unicode 字符下定义的通用手法（newunicodechar 内部同款做法），
-# 用它就不必额外依赖宏包。实测正文、标题、表格单元格、告示框、行内代码、围栏代码块、
+# 有了它就不必额外依赖宏包。实测正文、标题、表格单元格、告示框、行内代码、围栏代码块、
 # 封面与页眉里的这些符号都能正常排版（见 test_symbol_fallback.py）。
 _SYMBOL_FALLBACK_PREAMBLE = r"""
 %----- 正文符号回退（CJK 字体缺字形 → 数学字体）-----
 % 见 SYMBOL_FALLBACKS：∀ ∃ ∅ ⊂ ⊆ ⇒ ⇐ ⇔ ↦ ∂ ∇ ⊗ 等中文字体没有字形，
-% 直接写正文会变成空白；这里把它们映射到等价的 LaTeX 数学命令。
+% 直接写进正文会变成空白；这里把它们映射到等价的 LaTeX 数学命令。
 \makeatletter
 \newcommand\mdpdfSymbol[2]{%
   \begingroup
@@ -244,22 +244,22 @@ def symbol_fallback_preamble() -> str:
 # ---------------------------------------------------------------------------
 # 排版模板（LaTeX 导言区）
 # ---------------------------------------------------------------------------
-# 排版规则不再硬编码在脚本里，而是放在 templates 目录的模板文件里：
-#   default.tex   默认模板（紧凑讲义风格，内容即原 CTEXART_TEMP_PREAMBLE）
-#   academic.tex  学术论文风格（原 latex模板/article-cn/ctexart-temp.tex 的版心与宏包）
+# 排版规则放在 templates 目录的模板文件里，脚本本身不写死：
+#   default.tex   默认模板（紧凑讲义风格）
+#   academic.tex  学术论文风格（论文版心与相应宏包）
 # 不指定 --template 时用 default.tex。生成 .tex 时把模板拼在正文之前，并替换两个
 # 占位符：
 #   __SYMBOL_FALLBACKS__  正文符号回退表（必须紧接 \documentclass，见模板内注释）
 #   __PAGE_HEADER__       页眉文字
-# --template 既可给 .tex 路径，也可只给内置名（default / academic）。注意模板不是
-# 「任意 LaTeX 导言区都能套」：它必须自带本工具产出正文所需的定义（listings、
-# tcolorbox、符号回退表…），缺了会在 _template_missing_deps 里被挡下并列出补法。
+# --template 既可给 .tex 路径，也可只给内置名（default / academic）。模板并非随便
+# 一份导言区就能套：它必须自带本工具产出正文所需的定义（listings、tcolorbox、
+# 符号回退表…），缺了会在 _template_missing_deps 里被挡下并列出补法。
 # 打包 exe 时 templates 目录由 PyInstaller 收进解包目录（见 build_exe.ps1 --add-data）。
 TEMPLATE_DIRNAME = "templates"
 DEFAULT_TEMPLATE_NAME = "default.tex"
 # 模板里的两个占位符。替换是**全文文本替换**（str.replace），所以模板注释里
-# 一旦写出完整字面量，会被一起替换掉、导言区错位——load_template 用"必须恰好
-# 出现一次"把这种情况拦成明确报错，而不是生成一份编译失败或符号空白的 .tex。
+# 一旦写出完整字面量，会被一起替换掉，导言区跟着错位。load_template 用"必须恰好
+# 出现一次"把这种情况拦成明确报错，省得生成一份编译失败或符号空白的 .tex。
 PLACEHOLDER_SYMBOLS = "__SYMBOL_FALLBACKS__"
 PLACEHOLDER_HEADER = "__PAGE_HEADER__"
 
@@ -295,8 +295,8 @@ def resolve_template_path(path: "str | os.PathLike[str] | None") -> Path:
     - **不带目录分隔符**的名字（`academic`、`academic.tex`）→ 在内置 templates
       目录里找。
 
-    注意：带路径的写法一旦不存在就直接报错，**不会**退回内置同名模板 ——
-    否则 `--template .\\default.tex` 打错字会静默用上内置模板，很难察觉。
+    带路径的写法一旦不存在就直接报错，不退回内置同名模板：否则
+    `--template .\\default.tex` 打错字会静默用上内置模板，很难察觉。
     """
     if not path:
         return default_template_path()
@@ -321,19 +321,18 @@ def load_template(path: "str | os.PathLike[str] | None" = None,
     硬校验（都是用户输入问题，报错要能直接定位）：
 
     1. 文件存在；
-    2. \begin{document} **恰好一次** —— 它是注入点（封面配色 / 编号深度 /
-       目录深度 / PDF 元数据都插在它前面）。0 次则拼出的 .tex 不完整；多于
-       一次说明注释里写了字面量，注入块会被插进注释（实测表现为
-       \hypersetup 未定义之类的编译失败）；
-    3. 两个占位符**至多一次** —— 同理，多于一次必然是注释里写了字面量。
+    2. \begin{document} 恰好一次。它是注入点，封面配色 / 编号深度 / 目录深度 /
+       PDF 元数据都插在它前面。0 次则拼出的 .tex 不完整；多于一次说明注释里写了
+       字面量，注入块会被插进注释（实测表现为 \hypersetup 未定义之类的编译失败）；
+    3. 两个占位符至多一次。同理，多于一次必然是注释里写了字面量。
 
     **完整文档式模板**（自带正文与 \end{document}，如现成的论文 .tex）只取
     \begin{document} 之前的导言区，模板自带的正文 / 摘要 / 参考文献会被丢弃，
-    并经 notes 回一条说明。md-to-pdf 自己生成封面与正文，模板的正文只会
+    并经 notes 回一条说明。md-latex-pdf 自己生成封面与正文，模板的正文只会
     拼出双 \end{document} 的坏文件。
 
-    占位符**缺失**不在这里报错（由 build_tex 记警告），但生成器产出正文所依赖
-    的定义（listings / tcolorbox / …）缺失会在 build_tex 里报硬错。
+    占位符缺失不在这里报错（由 build_tex 记警告），但生成器产出正文所依赖的
+    定义（listings / tcolorbox / …）缺失会在 build_tex 里报硬错。
     """
     p = resolve_template_path(path)
     if not p.is_file():
@@ -349,14 +348,14 @@ def load_template(path: "str | os.PathLike[str] | None" = None,
     if n_doc != 1:
         raise ValueError(
             f"模板里的 \\begin{{document}} 出现 {n_doc} 次，必须恰好一次：{p}\n"
-            f"（常见原因：把 \\begin{{document}} 写进了注释。md-to-pdf 做全文替换，"
+            f"（常见原因：把 \\begin{{document}} 写进了注释。md-latex-pdf 做全文替换，"
             f"注释里的也会被注入块替换掉，导致导言区错位）")
     for token, what in ((PLACEHOLDER_SYMBOLS, "符号回退"), (PLACEHOLDER_HEADER, "页眉")):
         n = text.count(token)
         if n > 1:
             raise ValueError(
                 f"模板里「{what}」占位符出现了 {n} 次，必须恰好一次：{p}\n"
-                f"（常见原因：把 {token} 写进了注释；md-to-pdf 做全文替换，"
+                f"（常见原因：把 {token} 写进了注释；md-latex-pdf 做全文替换，"
                 f"注释里的也会被替换掉，导致导言区错位）")
     # 完整文档式模板：截到 \begin{document} 为止（含它本身，它是注入点）
     end_doc = text.find(r"\end{document}")
@@ -381,11 +380,11 @@ _TEMPLATE_DEPS = (
      r"\usepackage{color,xcolor}"),
     (r"\begin{lstlisting}", "listings", "代码块",
      r"\usepackage{listings} 与 \lstset{...}"),
-    (r"\begin{tipbox}", "tcolorbox", "要点框 ::tip / 引述标记 > 💡",
+    (r"\begin{tipbox}", "tcolorbox", "告示框 > [!TIP] / 引述标记 > 💡",
      r"\usepackage[most]{tcolorbox} 与 \newtcolorbox{tipbox}..."),
-    (r"\begin{warnbox}", "tcolorbox", "告示框 > [!WARNING] / ::warn",
+    (r"\begin{warnbox}", "tcolorbox", "告示框 > [!WARNING] / 引述标记 > ⚠",
      r"\usepackage[most]{tcolorbox} 与 \newtcolorbox{warnbox}..."),
-    (r"\begin{keybox}", "tcolorbox", "要点框 ::key / > [!IMPORTANT]",
+    (r"\begin{keybox}", "tcolorbox", "告示框 > [!IMPORTANT]",
      r"\usepackage[most]{tcolorbox} 与 \newtcolorbox{keybox}..."),
     (r"\begin{notebox}", "tcolorbox", "告示框 > [!NOTE]",
      r"\usepackage[most]{tcolorbox} 与 \newtcolorbox{notebox}..."),
@@ -408,7 +407,7 @@ def _template_missing_deps(preamble: str, body: str) -> list[str]:
     problems: list[str] = []
     for marker, needs, what, fix in _TEMPLATE_DEPS:
         if marker is not None and marker not in body:
-            continue  # 这篇 md 没用到，不要求模板提供
+            continue  # 这篇 Markdown 没用到，不要求模板提供
         if needs not in preamble:
             where = "正文用到" if marker is not None else "每次转换都要"
             problems.append(f"{where}{what}，但模板里没有 {needs} → 请加 {fix}")
@@ -445,9 +444,9 @@ def tex_escape_url(s: str) -> str:
 
 # ---------------------------------------------------------------------------
 # 中文弯引号（smart quotes）
-# 直引号 " / ' 原样进 LaTeX 会落到西文字体（Latin Modern），渲染成细小的
-# 英文引号/撇号；转成中文弯引号 “ ” / ‘ ’ 后由中文字体以全角渲染。
-# 行内代码/公式/链接的引号在 md_inline 里先 stash 成占位符，不会误转。
+# 直引号 " / ' 原样进 LaTeX 会落到西文字体（Latin Modern）上，排出来是西文的
+# 引号/撇号；转成中文弯引号 “ ” / ‘ ’ 后由中文字体按全角排。
+# 行内代码/公式/链接里的引号在 md_inline 里先 stash 成占位符，不会误转。
 # ---------------------------------------------------------------------------
 _CJK_RANGE_RE = re.compile(r"[\u3400-\u4dbf\u4e00-\u9fff\uf900-\ufaff\u3000-\u303f\uff00-\uffef]")
 
@@ -491,7 +490,7 @@ def smart_cjk_quotes(s: str, enabled: bool = True) -> str:
     """中文段落智能引号：成对 ASCII 直引号 → 中文弯引号 “ ” / ‘ ’。
 
     enabled=False（纯英文文档）或本段不含中文（纯英文段落/标题/单元格）时
-    原样返回，避免把西文排版改坏；含中文的文本块里即使只引用英文短语
+    原样返回，免得把西文排版改坏；含中文的文本块里即使只引用英文短语
     （如 “smart quotes”）也转成中文引号。
     """
     if not enabled or not _has_cjk(s):
@@ -610,7 +609,6 @@ _LST_LANGS = {
     "ruby": "Ruby", "php": "PHP", "matlab": "Matlab", "lua": "Lua", "r": "R",
 }
 _HEADING_CMDS = {1: "section", 2: "subsection", 3: "subsubsection", 4: "paragraph"}
-_TIP_DEFAULTS = {"tip": "要点", "warn": "注意", "key": "核心"}
 
 
 def _detect_min_heading_level(text: str) -> int:
@@ -749,17 +747,8 @@ def render_list(ordered: bool, items: list[tuple[str, str, list[str]]], ctx) -> 
     return "\n".join(out)
 
 
-def render_tipbox(kind: str, title: str, inner: list[str]) -> str:
-    if not title:
-        title = _TIP_DEFAULTS[kind]
-    env = {"tip": "tipbox", "warn": "warnbox", "key": "keybox"}[kind]
-    body = "\n\n".join(inner) if inner else ""
-    head = f"\\begin{{{env}}}[{tex_escape(title)}]"
-    return head + ("\n" + body if body else "") + f"\n\\end{{{env}}}"
-
-
 # GitHub 风格告示框 > [!TYPE]：类型 → (tcolorbox 环境, 缺省标题)。
-# 复用 tip/warn/key 配色 + 新增 NOTE(蓝)/CAUTION(红)。
+# 五个环境由模板提供，配色在模板里改，这里只管选哪一个。
 _GITHUB_ADMON = {
     "note": ("notebox", "注意"),
     "tip": ("tipbox", "提示"),
@@ -793,9 +782,9 @@ _QUOTE_TITLE_STOP = "。！？!?…"  # 以句末标点结尾的也不当标题�
 
 
 def render_quote(inner: list[str], ctx) -> str:
-    """普通引用（`> 引用`，不带任何标记）→ 浅灰底 + 左侧竖条的 mdocquote 框。
+    """普通引用（`> 引用`，不带任何标记）→ 浅灰底 + 左侧竖条的 mdpdfquote 框。
 
-    内容为空（孤零零一个 `>`）时什么都不输出，避免留一条空的灰条。
+    内容为空（孤零零一个 `>`）时什么都不输出，省得留一条空的灰条。
     """
     body = "\n\n".join(inner) if inner else ""
     if not body.strip():
@@ -806,9 +795,9 @@ def render_quote(inner: list[str], ctx) -> str:
 def render_quote_mark(icon: str, text: str, rest: list[str], ctx) -> str:
     """把 [icon] 开头的引用块渲染成对应彩色告示框。
 
-    标题规则：标记行剩下的文字**够短**（≤16 显示宽度、不以句末标点结尾）→ 当框标题，
+    标题规则：标记行剩下的文字够短（≤16 显示宽度、不以句末标点结尾）就当框标题，
     与 `> [!TIP] 快速检查` 的写法一致；否则标题用该类型的缺省名，这段话留在正文里
-    （保留标记字符本身，读者仍能看出作者标的是哪一类）。
+    （标记字符本身保留，读者仍能看出作者标的是哪一类）。
     """
     env, default_title = _QUOTE_MARKS[icon]
     keep_as_title = (bool(text) and disp_width(text) <= _QUOTE_TITLE_MAX
@@ -914,20 +903,6 @@ def parse_blocks(lines: list[str], ctx) -> list[str]:
             out.append(render_table(tbl, ctx))
             continue
 
-        # 要点框
-        m = re.match(r"^::(tip|warn|key)\s*(.*)$", s)
-        if m:
-            kind, title = m.group(1), m.group(2).strip()
-            body: list[str] = []
-            i += 1
-            while i < n and not lines[i].strip().startswith("::end"):
-                body.append(lines[i])
-                i += 1
-            if i < n:
-                i += 1  # 跳过 ::end
-            out.append(render_tipbox(kind, title, parse_blocks(body, ctx)))
-            continue
-
         # 强制分页
         if s == "::page":
             out.append(r"\clearpage")
@@ -976,7 +951,7 @@ def parse_blocks(lines: list[str], ctx) -> list[str]:
             elif mark:
                 out.append(render_quote_mark(mark[0], mark[1], mark[2], ctx))
             else:
-                # 普通引用：浅灰底 + 左侧竖条（不再是无样式的 \begin{quote}）
+                # 普通引用：浅灰底 + 左侧竖条
                 out.append(render_quote(parse_blocks(q, ctx), ctx))
             continue
 
@@ -1095,11 +1070,11 @@ def parse_front_matter(md_text: str) -> tuple[dict, str]:
 
 def _store_meta(meta: dict, k: str, v: str):
     kk = k.lower()
-    if kk == "页眉":  # 中文关键词（替代英文 header）
+    if kk == "页眉":  # 中文关键词，等价于英文 header
         kk = "header"
-    elif kk in ("页尾", "footer", "页脚"):  # 封面底部说明（旧称 foot，现统一 页尾）
+    elif kk in ("页尾", "footer", "页脚"):  # 封面底部说明，等价于英文 foot
         kk = "foot"
-    elif kk == "封面":  # 封面底色（中文关键词，替代英文 cover）
+    elif kk == "封面":  # 封面底色，等价于英文 cover
         kk = "cover"
     if kk in ("title", "subtitle", "kicker", "header", "foot", "cover"):
         meta[kk] = v
@@ -1123,8 +1098,8 @@ def build_tex(meta: dict, body_md: str, opts: argparse.Namespace, ctx) -> str:
     sq = lambda s: smart_cjk_quotes(s, ctx.cjk_mode)
 
     # ---- 封面：titlepage + 纯色背景（\pagecolor）+ 黑字 ----
-    # 排版要点：标题块整体位于页面上方约 30% 高度处（视觉重心偏上），
-    # 无 kicker 栏目、无横线分隔，元信息居中，脚注小字沉底，上下留白均衡 → 居中整洁大气。
+    # 标题块落在页面上方约 30% 高度处（视觉重心偏上）；没有 kicker 栏目，也没有
+    # 横线分隔；元信息居中，脚注小字沉底。
     cover = [r"\begin{titlepage}", r"\pagecolor{coverbg}", r"\thispagestyle{empty}",
              r"\color{black}", r"\centering"]
     cover.append(r"\vspace*{0.30\textheight}")
@@ -1148,8 +1123,8 @@ def build_tex(meta: dict, body_md: str, opts: argparse.Namespace, ctx) -> str:
 
     # ---- 正文 ----
     # 封面的一级标题（# 封面标题）不计数。若正文没有 # 一级标题（被封面吸收），
-    # 则把整篇当作单一"章 1"，并把 section 计数预置为 1，使封面外的第一个二级标题
-    # 按 1.1、1.2… 编号（既不是 0.1、0.2…，也不提升成单独"1"）。
+    # 则把整篇当作单一"章 1"，并把 section 计数预置为 1，让封面外的第一个二级标题
+    # 按 1.1、1.2… 编号，免得出现 0.1、0.2… 或者孤立的 1。
     ctx.heading_shift = 0  # 保持常规映射：#→section、##→subsection、###→subsubsection
     section_pre = ""
     if _detect_min_heading_level(body_md) >= 2:
@@ -1169,7 +1144,7 @@ def build_tex(meta: dict, body_md: str, opts: argparse.Namespace, ctx) -> str:
 
     template = load_template(getattr(opts, "template", None), notes=ctx.warnings)
     # 占位符缺失不会让编译失败，后果都是"静默"的（符号空白 / 页眉不显示），
-    # 所以必须显式提示，否则用户只会以为"排版本来就这样"。
+    # 所以这里要明确提示一句，否则用户只当"排版本来就这样"。
     if PLACEHOLDER_SYMBOLS not in template:
         ctx.warnings.append(
             f"模板缺少 {PLACEHOLDER_SYMBOLS}：正文与页眉里的 ∀ ⊆ ⇒ 等符号会静默渲染为空白")
@@ -1192,13 +1167,13 @@ def build_tex(meta: dict, body_md: str, opts: argparse.Namespace, ctx) -> str:
     missing = _template_missing_deps(preamble, "\n".join(body))
     if missing:
         raise ValueError(
-            "模板缺少 md-to-pdf 产出所需的定义，编译必然失败：\n"
+            "模板缺少 md-latex-pdf 产出所需的定义，编译必然失败：\n"
             + "\n".join(f"  - {m}" for m in missing)
-            + "\n\n--template 用的模板不是「任意 LaTeX 导言区都能套」：它必须自带本工具"
+            + "\n\n--template 指定的模板并非随便一份导言区就能用：它必须自带本工具"
             "\n产出的 LaTeX 所需定义。最省事的做法是复制 templates\\default.tex 再改样式，"
-            "\n或直接用内置模板：--template academic")
+            "\n或用内置模板：--template academic")
     # 封面颜色 / 编号深度 / 目录深度 / PDF 元数据 由生成器注入。
-    # 注入块必须**自给自足**：模板未必定义 \mdcovercolor、未必加载 hyperref。
+    # 注入块必须自给自足：模板未必定义 \mdcovercolor、未必加载 hyperref。
     # \providecommand 在模板已定义时是 no-op（默认模板正是如此），
     # \ifdefined 守卫让没加载 hyperref 的模板也能编过。
     inject = "\n".join([
@@ -1249,7 +1224,7 @@ def find_xelatex() -> Path:
                 return hits[0]
     raise RuntimeError(
         "未找到 xelatex。请安装 TinyTeX/MiKTeX/TeX Live，或设置环境变量 XELATEX_PATH。"
-        "Windows 上可运行 install_tex.ps1 一键安装 TinyTeX。"
+        "Windows 上可以运行 install_tex.ps1 装 TinyTeX。"
     )
 
 
@@ -1259,9 +1234,10 @@ _MISSING_CHAR_RE = re.compile(r"Missing character: There is no (\S+) \(U\+([0-9A
 def collect_missing_chars(log_text: str, warnings: list[str], limit: int = 20) -> None:
     """把 xelatex 的 "Missing character" 警告汇总成一条用户可读的提示。
 
-    缺字形在 PDF 里表现为**空白**，不报错、不中断编译，很容易被当成"排版就是这样"。
-    列出具体字符 + 码位，并给出 $...$ 的替代写法；常见符号已由 SYMBOL_FALLBACKS
-    兜住（❗ ⚠ 💡 见 EMOJI_ICONS），走到这里的通常是两处都还没收录的冷僻字符。
+    缺字形在 PDF 里表现为空白，不报错也不中断编译，很容易被当成"排版就是这样"。
+    这里列出具体字符和码位，并给出 $...$ 的替代写法。常见符号已经由
+    SYMBOL_FALLBACKS 兜住（❗ ⚠ 💡 见 EMOJI_ICONS），能走到这里的通常是两处都
+    还没收录的冷僻字符。
     """
     found: dict[str, str] = {}
     for m in _MISSING_CHAR_RE.finditer(log_text):
@@ -1273,7 +1249,7 @@ def collect_missing_chars(log_text: str, warnings: list[str], limit: int = 20) -
     warnings.append(
         f"以下字符本机字体无字形，PDF 中显示为空白：{items}{more}"
         "。可改用 $...$ 包裹的等价写法（如 $\\forall$、$\\Leftarrow$、$\\varnothing$）；"
-        "若该符号常用，可加入 md_to_pdf.py 的 SYMBOL_FALLBACKS 表。"
+        "若该符号常用，可以加进 md_latex_pdf.py 的 SYMBOL_FALLBACKS 表。"
     )
 
 
@@ -1290,8 +1266,8 @@ def compile_tex(tex_path: Path, out_dir: Path, keep_aux: bool,
         f"-output-directory={out_arg}", tex_arg,
     ]
     # 循环编译直到 .aux 稳定（目录/引用需要多遍；上限 5 遍）
-    # 注：text=True 时必须显式 UTF-8 + errors="replace"，否则 Windows 下 Python 按
-    # GBK 解码 xelatex 的 UTF-8 中文输出会抛 UnicodeDecodeError。
+    # text=True 时必须显式 UTF-8 + errors="replace"：否则 Windows 下 Python 会按
+    # GBK 解码 xelatex 的 UTF-8 中文输出，抛 UnicodeDecodeError。
     prev_hash = None
     for i in range(5):
         r = subprocess.run(base, cwd=out_dir, capture_output=True, text=True,
@@ -1329,7 +1305,7 @@ def compile_tex(tex_path: Path, out_dir: Path, keep_aux: bool,
     return pdf
 
 # ---------------------------------------------------------------------------
-# 可复用的转换入口（CLI 与 GUI 共用，保证转换逻辑一致且稳定）
+# 可复用的转换入口（CLI 与 GUI 共用同一份逻辑）
 # ---------------------------------------------------------------------------
 def _is_ascii(s: str) -> bool:
     """判断字符串是否为纯 ASCII（xelatex 的 TEXMF_OUTPUT_DIRECTORY 只接受纯 ASCII）。"""
@@ -1354,13 +1330,13 @@ def convert_file(md_path: str, out_dir: str | None = None, keep_aux: bool = Fals
                  out_stem: str | None = None) -> tuple[Path, Path, Ctx]:
     r"""核心转换：Markdown → <同名>.tex + <同名>.pdf。
 
-    供 CLI（main）与 GUI（md_to_pdf_gui）共用，确保转换逻辑一致、稳定且不散落两处。
+    供 CLI（main）与 GUI（md_latex_pdf_gui）共用，转换逻辑只此一份。
 
     - md_path: 输入的 .md 文件；
-    - out_dir: 输出目录，默认与 md 同目录；
+    - out_dir: 输出目录，默认与 Markdown 文件同目录；
     - keep_aux: 是否保留编译中间文件（.aux/.log 等）；
     - opts: 已解析的 argparse.Namespace；缺省用默认值（与 CLI 默认一致）；
-    - out_stem: 输出文件名（不含扩展名），默认取 md 文件名（即 <同名>.tex/.pdf）。
+    - out_stem: 输出文件名（不含扩展名），默认取 Markdown 文件名（即 <同名>.tex/.pdf）。
 
     处理细节：
       - 输出目录含中文时（TinyTeX 的 putenv 不接受非 ASCII 输出路径），自动在纯
@@ -1395,12 +1371,12 @@ def convert_file(md_path: str, out_dir: str | None = None, keep_aux: bool = Fals
     out_stem = out_stem or md_path.stem
 
     # 输出目录必须纯 ASCII（TinyTeX putenv 限制）；否则在 ASCII 临时目录编译后再拷回。
-    # 注意：Windows 的 %TEMP% 常以 8.3 短路径（如 C:\Users\XXXXXX~1\...）暴露，
-    # xelatex 不接受短路径，故用 resolve() 展开回长路径。
+    # Windows 的 %TEMP% 常以 8.3 短路径（如 C:\Users\XXXXXX~1\...）暴露，
+    # xelatex 不接受短路径，所以用 resolve() 展开回长路径。
     work_dir = out_dir
     temp_dir = None
     if not _is_ascii(str(out_dir)):
-        temp_dir = Path(tempfile.mkdtemp(prefix="md-to-pdf_")).resolve()
+        temp_dir = Path(tempfile.mkdtemp(prefix="md-latex-pdf_")).resolve()
         work_dir = temp_dir
 
     # 复制图片到工作目录 images/
@@ -1438,7 +1414,7 @@ def convert_file(md_path: str, out_dir: str | None = None, keep_aux: bool = Fals
 # ---------------------------------------------------------------------------
 def main(argv: list[str] | None = None) -> int:
     ap = argparse.ArgumentParser(
-        prog="md-to-pdf", description="Markdown → LaTeX → PDF（xelatex，LaTeX 风格紧凑排版）；不带参数或加 --gui 启动图形界面")
+        prog="md-latex-pdf", description="Markdown → LaTeX → PDF（用 xelatex 编译，LaTeX 风格紧凑排版）；不带参数或加 --gui 启动图形界面")
     ap.add_argument("input", nargs="?", default=None,
                     help="输入的 Markdown 文件（缺省启动图形界面）")
     ap.add_argument("outdir", nargs="?", default=None, help="输出目录（默认与输入同目录）")
@@ -1459,15 +1435,15 @@ def main(argv: list[str] | None = None) -> int:
     ap.add_argument("--open", action="store_true", help="生成后打开 PDF")
     ap.add_argument("--gui", action="store_true",
                     help="启动图形界面（拖入 .md 文件即可转换）")
-    ap.add_argument("--version", action="version", version=f"md-to-pdf {VERSION}")
+    ap.add_argument("--version", action="version", version=f"md-latex-pdf {VERSION}")
     args = ap.parse_args(argv)
 
     # 图形界面入口：无输入文件或显式 --gui
     if args.gui or args.input is None:
         try:
-            from md_to_pdf_gui import launch
+            from md_latex_pdf_gui import launch
         except ImportError as e:
-            print(f"错误：无法加载图形界面（{e}）。请确认 md_to_pdf_gui.py 与 md_to_pdf.py 在同一目录。",
+            print(f"错误：无法加载图形界面（{e}）。请确认 md_latex_pdf_gui.py 与 md_latex_pdf.py 在同一目录。",
                   file=sys.stderr)
             return 1
         return launch()
@@ -1481,8 +1457,8 @@ def main(argv: list[str] | None = None) -> int:
     try:
         tex_path, pdf, ctx = convert_file(md_path, out_dir, keep_aux=args.keep_aux, opts=args)
     except (FileNotFoundError, ValueError, RuntimeError) as e:
-        # ValueError 来自模板校验（如缺 \begin{document}）：属用户输入问题，
-        # 打印一句错误即可，不该抛后台堆栈。
+        # ValueError 来自模板校验（如缺 \begin{document}），属用户输入问题，
+        # 打一句错误就够了，用不着抛堆栈。
         print(f"错误：{e}", file=sys.stderr)
         return 1
 
@@ -1496,7 +1472,7 @@ def main(argv: list[str] | None = None) -> int:
 
 
 class Ctx:
-    """转换上下文：md 所在目录、输出目录、脚注、图片映射、警告。"""
+    """转换上下文：Markdown 文件所在目录、输出目录、脚注、图片映射、警告。"""
 
     def __init__(self, md_dir: Path, outdir: Path):
         self.md_dir = md_dir

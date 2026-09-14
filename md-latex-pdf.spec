@@ -6,7 +6,7 @@ datas += collect_data_files('tkinterdnd2')
 
 
 a = Analysis(
-    ['md_to_pdf_gui.py'],
+    ['md_latex_pdf_gui.py'],
     pathex=[],
     binaries=[],
     datas=datas,
@@ -26,7 +26,7 @@ exe = EXE(
     a.binaries,
     a.datas,
     [],
-    name='md-to-pdf',
+    name='md-latex-pdf',
     debug=False,
     bootloader_ignore_signals=False,
     strip=False,

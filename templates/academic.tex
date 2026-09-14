@@ -1,61 +1,37 @@
 % -*- coding: utf-8 -*-
 % !TEX program = xelatex
-% 本文件由 md-to-pdf 生成；LaTeX 风格基于 latex模板/article-cn/ctexart-temp.tex
+% md-latex-pdf 的学术排版模板：版心和参考文献按论文规格来，正文生成方式与默认模板一致。
 %
 % ===========================================================================
-% md-to-pdf 学术模板（academic）
-% 版心与宏包取自 latex模板/article-cn/ctexart-temp.tex（原学术论文模板）。
+% 与 default.tex 的差别只在排版上：
+%   版心 1.25in / 1in，比默认模板的 2cm 宽松，长公式和宽表格不容易挤；
+%   多一个 natbib，参考文献按 thuthesis 的习惯排版。
+% 宏包集合、定理环境、算法环境、命令宏、代码块与告示框定义都与默认模板相同。
 %
-% 与默认模板 default.tex 的差别**只有排版风格**：
-%   - 版心用原学术模板的 1.25in / 1in（默认模板是紧凑的 2cm / 2.2cm）
-%   - 额外带 natbib 参考文献宏包，以及 thuthesis 式的参考文献间距设置
-% 其余（宏包集合、定理环境、算法环境、命令宏、代码块与告示框定义）两者一致 ——
-% 默认模板本来就是从同一份学术模板改出来的（加了紧凑版心、封面、居中页眉页脚）。
+% 用法：--template 写内置名 academic 就行，带 .tex 也可以；
+% 想改样式就把本文件复制一份。
+%     md-latex-pdf 讲义.md --template academic
 %
-% 三个标记在本文件里各出现一次，都不能删、也别在注释里写出完整字面量：
-%   1) 紧接 \documentclass 的符号回退占位符；2) 页眉占位符（fancyhdr 那行）；
-%   3) 正文起点标记。作用与坑见 templates\default.tex 头部注释，或 README 的
-%      「换排版规则（--template）」一节。
+% 模板契约与默认模板一致：紧跟 documentclass 的符号回退占位符、fancyhdr 那行的
+% 页眉占位符、文件末尾的 document 环境起点，三样各出现一处，不能删也不能挪。
+% 它们也不能在注释里写成完整字面量：转换是全文文本替换，注释里的照样会被换掉。
+% 作用与坑见 templates\default.tex 头部的说明，或 README 的「换排版规则」一节。
 %
-% 改完跑一次验证：python md_to_pdf.py example.md --template academic
-% ===========================================================================
-% md-to-pdf 默认排版模板（LaTeX 导言区）。md-to-pdf 的排版规则都在这里。
-%
-% 用法：想换一套规则，把本文件复制一份改掉，然后
-%     md-to-pdf 讲义.md --template 我的模板.tex
-% （GUI 里也有「排版模板」一栏可选；留空即用本默认模板。）
-%
-% 模板契约 —— 三样东西不能少（照抄本文件、别删即可）：
-%   1) 紧接 \documentclass 的那行「符号回退占位符」：两个下划线夹住
-%      SYMBOL 与 FALLBACKS 的那个词。md-to-pdf 会把它换成符号回退表。
-%      它必须是文件里唯一一处、且紧跟 \documentclass —— 删掉或挪后，
-%      正文与页眉里的 ∀ ⊆ ⇒ 会静默渲染成空白（xelatex 不报错）。
-%   2) fancyhdr 页眉那行的「页眉占位符」：两个下划线夹住 PAGE 与 HEADER
-%      的那个词。md-to-pdf 换成 --header / front matter 的页眉文字。
-%   3) 正文起点标记（\begin 加 document 的那个环境开头，本文件末尾）——
-%      md-to-pdf 在它前面插入封面配色、编号深度、目录深度与 PDF 元数据，
-%      再拼上封面 / 目录 / 正文。
-%
-% 注意：上面三样东西（两个占位符 + 正文起点标记）都**不要在本注释里写出完整
-% 字面量**——md-to-pdf 做的是全文文本替换，注释里写全了会被一起替换掉、
-% 导言区错位。（load_template 已加"必须恰好出现一次"的校验来拦这种情况。）
-%
-% 改完模板后建议跑一次：python md_to_pdf.py example.md
-% 新增宏包记得装：tlmgr install <包名>（TinyTeX 见 install_tex.ps1）。
+% 改完跑一次验证：python md_latex_pdf.py example.md --template academic
 % ===========================================================================
 
 \documentclass[zihao=-4]{ctexart}
 
-%----- 正文符号回退（必须紧接 \documentclass，不能往后挪）-----
-% 原理：字符"活动化"只在**记号化之前**生效。导言区后面的
-% \fancyhead[C]{\small 页眉文字} 会先把页眉读成记号；若那一刻 ∀ 还不是活动字符，
-% 这个记号就被冻成普通字符，页眉里的 ∀ 又会渲染成空白（正文不受影响：正文
-% 要等开始排版之后才记号化）。所以这段必须放在任何会捕获正文文字的宏之前。
+%----- 正文符号回退（必须紧接 documentclass，不能往后挪）-----
+% 这段靠 xeCJK 的字符活动化，而活动化只对还没记号化的字符起作用。
+% 导言区后面的 \fancyhead[C]{\small 页眉文字} 先读页眉，∀ 那一刻还不是活动字符，
+% 记号就冻住了，页眉里的 ∀ 渲染成空白。正文要等开始排版才记号化，不受影响。
+% 所以这段必须排在所有会捕获正文文字的宏前面。
 __SYMBOL_FALLBACKS__
 
 \usepackage{amsmath,amsthm,amssymb}
-\usepackage[version=4]{mhchem} % \ce{...} 化学/核素符号（同位素、核反应），物理学讲义常用
-\usepackage{siunitx} % \SI{...}{...} 物理单位（不用的文档无影响，见 install_tex.ps1）
+\usepackage[version=4]{mhchem} % \ce{...} 化学式与核素符号（同位素、核反应）
+\usepackage{siunitx} % \SI{...}{...} 物理单位（正文不写这类单位就没影响，见 install_tex.ps1）
 \usepackage{mathrsfs}
 \usepackage{graphicx}
 \usepackage{subfig}
@@ -71,16 +47,16 @@ __SYMBOL_FALLBACKS__
 \usepackage{multirow,multicol}
 \usepackage{longtable}
 \usepackage{makecell}
-% 表格行距：中文表格上下行默认太挤，放大行高（对 tabular / longtable 均生效）
+% 中文行距下表格的上下行偏挤，行高放宽到 1.5 倍（tabular 与 longtable 都受用）
 \renewcommand{\arraystretch}{1.5}
 \usepackage{anyfontsize}
 \usepackage{geometry}
-\geometry{left=1.25in,right=1.25in,top=1in,bottom=1in} % 原学术模板版心
+\geometry{left=1.25in,right=1.25in,top=1in,bottom=1in} % 论文版心：左右 1.25in，上下 1in
 \setlength{\headheight}{18pt}
 \setlength{\headsep}{18pt}
 \setlength{\footskip}{25pt}
 
-%----- 页眉页脚（居中，ctexart-temp2 的 oneside 风格）-----
+%----- 页眉页脚（居中，页眉行高与页脚距离都比默认模板留得宽）-----
 \usepackage{fancyhdr}
 \pagestyle{fancy}
 \fancyhf{}
@@ -89,7 +65,7 @@ __SYMBOL_FALLBACKS__
 \renewcommand{\headrulewidth}{0.4pt}
 \renewcommand{\footrulewidth}{0pt}
 
-%----- 设置超链接 -----
+%----- 超链接：link 保持黑色，cite 与 URL 染蓝 -----
 \usepackage{hyperref}
 \hypersetup{
   colorlinks=true,
@@ -99,16 +75,16 @@ __SYMBOL_FALLBACKS__
   urlcolor=blue
 }
 
-% 允许多行公式跨页显示
+% 长公式允许跨页断开
 \allowdisplaybreaks
 
 %----- 交给 CJK 字体的码位（xeCJK 字符类）-----
-% 为什么需要：中文字体（SimSun/FangSong）自带的符号远比西文主字体（Latin Modern）
-% 多。落在西文字体上的符号，LM 没有字形就只有空白（如 Ⅰ Ⅱ Ⅲ、■ □、─ │、′ ″）。
-% 这里声明为 CJK 字符类的码位，改由中文字体排版。
-% 依据实测（measure_coverage.py 会重算）：只声明"SimSun 与 FangSong 都有字形、
-% 且 Latin Modern 没有"的码位。**每段必须是连续区间**——段内一旦夹着西文字体
-% 本来就能显示的字符，声明过去反而会把它弄坏。改完跑 test_symbol_fallback.py。
+% 西文主字体（Latin Modern）缺的字形比中文字体（SimSun / FangSong）多得多，
+% 这些符号落在西文字体上就是一片空白，比如 Ⅰ Ⅱ Ⅲ、■ □、─ │、′ ″。
+% 把下面这些码位声明成 CJK 字符类，交给中文字体排。
+% 清单按 measure_coverage.py 的实测结果收：只保留 SimSun 与 FangSong 都有
+% 字形、Latin Modern 却没有的码位，而且要连成区间——区间里混进西文字体本来
+% 就有的字符，反倒会把它弄坏。改完跑 test_symbol_fallback.py。
 \xeCJKDeclareCharClass{CJK}{
   "0370 -> "03FF,                          % 希腊字母（3σ、均值 μ）
   "2015, "2032 -> "2033, "2035,            % ― 角分秒 ′ ″ ‵
@@ -126,36 +102,36 @@ __SYMBOL_FALLBACKS__
   "2605 -> "2606, "2609, "2640, "2642     % ★☆☉♀♂
 }
 
-%----- 设置编号格式 -----
+%----- 编号格式：公式 / 图 / 表 都按「章节.序号」 -----
 \numberwithin{equation}{section}
 \numberwithin{figure}{section}
 \numberwithin{table}{section}
 
-%----- 重新设置图表公式 autoref -------
+%----- autoref 引用出来的名字：图 / 表 / 公式 -------
 \renewcommand{\figureautorefname}{图}
 \renewcommand{\tableautorefname}{表}
 \renewcommand{\equationautorefname}{公式}
 
-%----- 算法环境 -----
+%----- 算法环境：标题写「算法」，Require / Ensure 改成输入 / 输出 -----
 \usepackage{algorithm}
 \usepackage{algpseudocode}
 \floatname{algorithm}{算法}
 \algrenewcommand\algorithmicrequire{\textbf{输入:}}
 \algrenewcommand\algorithmicensure{\textbf{输出:}}
 
-%----- 列表样式（紧凑）-----
+%----- 列表：去掉条目之间的额外间距，排紧凑 -----
 \setlist{nolistsep}
 
-%----- 图片路径（md-to-pdf 把本地图片复制到 ./images/）-----
+%----- 图片路径（md-latex-pdf 把本地图片复制到 ./images/；这里也搜 ./figure/ 与 ./figures/）-----
 \graphicspath{{./}{./images/}{./figure/}{./figures/}}
 
-%----- tabularx 新列类型 -----
+%----- tabularx 列类型：L / C / R 按表宽自动伸缩，P{宽度} 定宽居中 -----
 \newcolumntype{L}{X}
 \newcolumntype{C}{>{\centering \arraybackslash}X}
 \newcolumntype{R}{>{\raggedleft \arraybackslash}X}
 \newcolumntype{P}[1]{>{\centering \arraybackslash}p{#1}}
 
-%----- 数学定理设置 -----
+%----- 定理环境：按章节编号，例 单独连续编 -----
 \theoremstyle{plain}
 \newtheorem{definition}{定义}[section]
 \newtheorem{proposition}{命题}[section]
@@ -165,7 +141,7 @@ __SYMBOL_FALLBACKS__
 \newtheorem{corollary}{推论}[section]
 \newtheorem{remark}{注}[section]
 
-%----- 微分符号 / 常用命令（来自模板）-----
+%----- 微分、数集与几个常用简写 -----
 \newcommand{\dif}{\mathop{}\!\mathrm{d}}
 \newcommand{\CC}{\ensuremath{\mathbb{C}}}
 \newcommand{\RR}{\ensuremath{\mathbb{R}}}
@@ -178,7 +154,7 @@ __SYMBOL_FALLBACKS__
 \newcommand{\bA}{\boldsymbol{A}}
 \newcommand{\red}[1]{\textcolor{red}{#1}}
 
-%----- 代码块（listings）-----
+%----- 代码块：listings，加浅灰底与细边框 -----
 \usepackage{listings}
 \lstset{
   basicstyle=\ttfamily\small,
@@ -189,10 +165,10 @@ __SYMBOL_FALLBACKS__
   aboveskip=2pt, belowskip=2pt,
 }
 
-%----- 要点框（tip/warn/key，tcolorbox，可跨页）-----
-% 标题栏：浅彩底 + 深色加粗字（colbacktitle 必须显式设浅色，否则默认取深色边框导致看不清）
-% 注：GitHub 告示框 [!NOTE]/[!TIP]/[!IMPORTANT]/[!WARNING]/[!CAUTION] 分别映射到
-% notebox（蓝）/ tipbox（绿）/ keybox（紫）/ warnbox（橙）/ cautionbox（红）。
+%----- 告示框：五种彩色框，tcolorbox 实现，可跨页 -----
+% colbacktitle 要显式给浅色。不给就跟着 frame 走，深色边框配深色标题字，
+% 标题基本看不清。映射按 GitHub 的写法：notebox 蓝、tipbox 绿、keybox 紫、
+% warnbox 橙、cautionbox 红，依次对应 [!NOTE] [!TIP] [!IMPORTANT] [!WARNING] [!CAUTION]。
 \usepackage[most]{tcolorbox}
 \newtcolorbox{tipbox}[1][要点]{breakable,enhanced,colback=green!8,colframe=green!55!black,colbacktitle=green!12!white,coltitle=black!80,fonttitle=\bfseries,title={#1},boxrule=0.5pt,arc=1.5mm,left=2mm,right=2mm,top=1.5mm,bottom=1.5mm}
 \newtcolorbox{warnbox}[1][注意]{breakable,enhanced,colback=orange!8,colframe=orange!70!black,colbacktitle=orange!18!white,coltitle=black!80,fonttitle=\bfseries,title={#1},boxrule=0.5pt,arc=1.5mm,left=2mm,right=2mm,top=1.5mm,bottom=1.5mm}
@@ -200,19 +176,19 @@ __SYMBOL_FALLBACKS__
 \newtcolorbox{notebox}[1][注意]{breakable,enhanced,colback=blue!8,colframe=blue!55!black,colbacktitle=blue!12!white,coltitle=black!80,fonttitle=\bfseries,title={#1},boxrule=0.5pt,arc=1.5mm,left=2mm,right=2mm,top=1.5mm,bottom=1.5mm}
 \newtcolorbox{cautionbox}[1][小心]{breakable,enhanced,colback=red!8,colframe=red!60!black,colbacktitle=red!12!white,coltitle=black!80,fonttitle=\bfseries,title={#1},boxrule=0.5pt,arc=1.5mm,left=2mm,right=2mm,top=1.5mm,bottom=1.5mm}
 
-%----- 普通引用（引述文本）：浅灰底 + 左侧竖条，无标题 -----
-% 与上面五种彩色告示框同族但**中性**：不带标记的 `> 引用` 也该有排版（原先只是两侧
-% 缩进的 \begin{quote}，看上去和正文没差别）。boxrule=0pt + leftrule：只画一条左竖条，
-% 灰底色不抢眼，读者一眼能把"引述别人的话"与"作者自己的话"分开。
+%----- 普通引用：浅灰底 + 左侧竖条，不带标题 -----
+% 没有标记的 `> 引用` 也要和正文区分开。只用 quote 环境只是两侧缩进，
+% 看上去还是正文。所以这里 boxrule=0pt 加 leftrule，画一条左竖条就够，
+% 灰底压得住，读者一眼能看出哪段是引述、哪段是作者自己写的。
 \newtcolorbox{mdpdfquote}{breakable,enhanced,colback=black!4,colframe=black!45,boxrule=0pt,leftrule=1.6pt,arc=0.8mm,left=3mm,right=2.5mm,top=2mm,bottom=2mm}
 
-%----- 参考文献（取自原学术模板；md-to-pdf 不生成 \bibliography，
-%      需要引用时自己在导言区补 \bibliographystyle 并让 md 里有 \cite）-----
+%----- 参考文献：md-latex-pdf 不生成 \bibliography，得在导言区自己补
+%      \bibliographystyle，并让 Markdown 正文里出现 \cite -----
 \usepackage[numbers,sort&compress]{natbib}
-\def\bibfont{\small}                            % 参考文献字体
-\setlength{\bibsep}{7pt plus 3pt minus 3pt}     % 参考文献条目间距
+\def\bibfont{\small}                            % 参考文献比正文小一档
+\setlength{\bibsep}{7pt plus 3pt minus 3pt}     % 条目间距：中文行距下默认值太挤，松开一点
 
-%----- 封面：纯色背景 + 黑字（--cover-color 可改；默认白色纸张色）-----
+%----- 封面：整页纯色底 + 黑字（--cover-color 改底色，默认白纸色）-----
 \newcommand{\mdcovercolor}[1]{\definecolor{coverbg}{HTML}{#1}}
 \definecolor{coverbg}{HTML}{FFFFFF}
 
